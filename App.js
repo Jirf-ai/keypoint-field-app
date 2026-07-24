@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Image, Platform, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
+import FadeTransition from "./src/components/FadeTransition";
 import LaunchSplash, { LogoRow } from "./src/components/LaunchSplash";
 import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
@@ -174,6 +175,7 @@ export default function App() {
           )}
         </View>
 
+        <FadeTransition screenKey={authed ? screen : "auth"}>
         {!authed && (
           <AuthScreen
             t={t}
@@ -219,6 +221,7 @@ export default function App() {
             }}
           />
         )}
+        </FadeTransition>
       </View>
       {!splashDone && <LaunchSplash dock={dock} onDone={() => setSplashDone(true)} />}
     </SafeAreaView>
