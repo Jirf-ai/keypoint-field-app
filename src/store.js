@@ -5,7 +5,7 @@
 // one via `supersedes`; nothing is destroyed. Client-generated ids make future
 // sync idempotent.
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { PROJECT, todayStr } from "./schema";
+import { todayStr } from "./schema";
 
 const KEY = "kaicon-field:v1";
 
@@ -20,15 +20,18 @@ function uuid() {
 }
 
 const EMPTY = {
-  project_id: PROJECT.project_id,
   // Worker profiles (schema §4.8, minimized on purpose): name, trade,
   // language, selfie. active_worker_id gates the app — no profile, no capture.
   profiles: [],
   active_worker_id: null,
+  // Multi-project (Jeffrey 2026-07-24): the worker picks their project from
+  // Records; everything below partitions by current_project.id (Records uuid).
+  current_project: null,      // { id, name, status }
+  recent_projects: [],        // most recent first, deduped, capped
   lines: [],          // items + labor, append-only ({kind: 'item'|'labor'})
   photos: [],
   change_orders: [],
-  days: {},           // work_date -> {status, submitted_at, submitted_by}
+  days: {},           // `${project_id}:${work_date}` -> {status, submitted_at, submitted_by}
   settings: { lang: "en", recorded_by: "", lastPhase: null, lastArea: null },
 };
 
@@ -55,7 +58,8 @@ async function persist() {
 function stamp(entry) {
   return {
     ...entry,
-    project_id: PROJECT.project_id,
+    project_id: state.current_project?.id ?? null,   // Records uuid
+    project_name: state.current_project?.name ?? null,
     recorded_at: new Date().toISOString(),
     recorded_by: state.settings.recorded_by || "unknown",
     captured_offline: true, // v0 is always offline-first; sync layer comes later
@@ -63,6 +67,26 @@ function stamp(entry) {
     version: 1,
     supersedes: null,
   };
+}
+
+const RECENTS_MAX = 6;
+
+export async function setCurrentProject(p) {
+  state.current_project = { id: p.id, name: p.name, status: p.status ?? null };
+  state.recent_projects = [
+    state.current_project,
+    ...state.recent_projects.filter((x) => x.id !== p.id),
+  ].slice(0, RECENTS_MAX);
+  await persist();
+  return state.current_project;
+}
+
+export function currentProject() {
+  return state?.current_project ?? null;
+}
+
+export function recentProjects() {
+  return state?.recent_projects ?? [];
 }
 
 export async function saveSettings(patch) {
@@ -118,7 +142,7 @@ export async function addLine(entry) {
   state.settings.lastPhase = entry.phase ?? state.settings.lastPhase;
   state.settings.lastArea = entry.area ?? state.settings.lastArea;
   // Adding to a submitted day marks the day amended (PRD §5.1 daily submit).
-  const day = state.days[entry.work_date];
+  const day = state.days[dayKey(entry.work_date)];
   if (day && day.status === "submitted") day.status = "amended";
   await persist();
   return line;
@@ -167,27 +191,37 @@ export async function addChangeOrder(co) {
   return rec;
 }
 
+function dayKey(work_date) {
+  return `${state.current_project?.id ?? "none"}:${work_date}`;
+}
+
 export async function submitDay(work_date) {
-  state.days[work_date] = {
+  state.days[dayKey(work_date)] = {
     status: "submitted",
     submitted_at: new Date().toISOString(),
     submitted_by: state.settings.recorded_by || "unknown",
   };
   await persist();
-  return state.days[work_date];
+  return state.days[dayKey(work_date)];
 }
 
-// ------------------------------------------------------------------ selectors
+// ---------------------------------------------------------------- selectors
+// All day views are scoped to the CURRENT project — switching projects
+// switches what Today shows; nothing is ever mixed across jobs.
 export function activeLines(work_date) {
-  return state.lines.filter((l) => l.work_date === work_date && !l.superseded_by);
+  const pid = state.current_project?.id;
+  return state.lines.filter(
+    (l) => l.work_date === work_date && !l.superseded_by && l.project_id === pid
+  );
 }
 
 export function photosFor(work_date) {
-  return state.photos.filter((p) => p.work_date === work_date);
+  const pid = state.current_project?.id;
+  return state.photos.filter((p) => p.work_date === work_date && p.project_id === pid);
 }
 
 export function dayStatus(work_date) {
-  return state.days[work_date]?.status ?? "draft";
+  return state.days[dayKey(work_date)]?.status ?? "draft";
 }
 
 export function pendingCount() {
@@ -220,7 +254,9 @@ export function nextPhotoSeq(work_date) {
 }
 
 export function nextCoNo() {
-  return `CO-${String(state.change_orders.length + 1).padStart(3, "0")}`;
+  const pid = state.current_project?.id;
+  const n = state.change_orders.filter((c) => c.project_id === pid).length + 1;
+  return `CO-${String(n).padStart(3, "0")}`;
 }
 
 export function getSettings() {
@@ -228,5 +264,6 @@ export function getSettings() {
 }
 
 export function changeOrders() {
-  return state.change_orders;
+  const pid = state.current_project?.id;
+  return state.change_orders.filter((c) => c.project_id === pid);
 }

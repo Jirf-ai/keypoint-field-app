@@ -6,8 +6,8 @@ import { Image, ScrollView, StyleSheet, Switch, Text, View } from "react-native"
 import FloatingLabelInput from "../components/FloatingLabelInput";
 import { BigButton, Card, Label, Muted, PickRow } from "../components/ui";
 import { phaseLabel } from "../i18n";
-import { COST_CLASSES, PHASES, PROJECT, UNITS, validateLineItem, lineWarnings } from "../schema";
-import { activeLines, addLine, changeOrders, getSettings, linkPhoto } from "../store";
+import { COST_CLASSES, PHASES, UNITS, areasFor, validateLineItem, lineWarnings } from "../schema";
+import { activeLines, addLine, changeOrders, currentProject, getSettings, linkPhoto } from "../store";
 import { CLASS_COLORS, colors } from "../theme";
 
 const FIX_KEYS = {
@@ -134,7 +134,7 @@ export default function AddItemScreen({ t, lang, workDate, onDone, fromPhoto }) 
         />
 
         <Label>{t("area")}</Label>
-        <PickRow options={PROJECT.areas} value={area} onChange={setArea} />
+        <PickRow options={areasFor(currentProject()?.name)} value={area} onChange={setArea} />
 
         <View style={[s.row, s.gapTop, { alignItems: "center" }]}>
           <Switch value={est} onValueChange={setEst} trackColor={{ true: colors.brand }} />

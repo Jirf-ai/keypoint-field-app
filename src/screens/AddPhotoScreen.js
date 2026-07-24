@@ -8,8 +8,8 @@ import { File, Paths } from "expo-file-system";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 import { BigButton, Card, Label, Muted, PickRow } from "../components/ui";
 import { phaseLabel } from "../i18n";
-import { PHASES, PROJECT, photoFilename } from "../schema";
-import { activeLines, addPhoto, getSettings, nextPhotoSeq } from "../store";
+import { PHASES, areasFor, photoFilename } from "../schema";
+import { activeLines, addPhoto, currentProject, getSettings, nextPhotoSeq } from "../store";
 import { colors } from "../theme";
 
 export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
@@ -100,7 +100,7 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
               renderLabel={(p) => phaseLabel(p, lang)}
             />
             <Label>{t("area")}</Label>
-            <PickRow options={PROJECT.areas} value={area} onChange={setArea} />
+            <PickRow options={areasFor(currentProject()?.name)} value={area} onChange={setArea} />
             {lines.length > 0 && (
               <>
                 <Label>{t("linkLine")}</Label>

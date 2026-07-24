@@ -2,10 +2,18 @@
 // (PRD §6.1 design constraint). Three big buttons, today's entries below,
 // pending-sync badge always visible (silence breeds distrust — Tech Eval §6.3).
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import ProjectPicker from "../components/ProjectPicker";
 import { BigButton, Card, Muted } from "../components/ui";
 import { phaseLabel } from "../i18n";
-import { PROJECT } from "../schema";
-import { activeLines, dayStatus, photosFor, todayTotals } from "../store";
+import {
+  activeLines,
+  currentProject,
+  dayStatus,
+  photosFor,
+  recentProjects,
+  setCurrentProject,
+  todayTotals,
+} from "../store";
 import { CLASS_COLORS, colors } from "../theme";
 
 function usd(n) {
@@ -41,7 +49,8 @@ function LineRow({ l, lang, photoCount }) {
   );
 }
 
-export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPhoto }) {
+export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPhoto, onProjectChange }) {
+  const project = currentProject();
   const lines = activeLines(workDate);
   const photos = photosFor(workDate);
   const totals = todayTotals(workDate);
@@ -54,7 +63,15 @@ export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPho
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
       <View style={s.projRow}>
         <View style={{ flex: 1 }}>
-          <Text style={s.projName} numberOfLines={1}>{PROJECT.name}</Text>
+          <ProjectPicker
+            t={t}
+            current={project}
+            recents={recentProjects()}
+            onSelect={async (p) => {
+              await setCurrentProject(p);
+              onProjectChange?.();
+            }}
+          />
           {/* TODAY = the actual date, its own element — never part of the logo. */}
           <Text style={s.dateLine}>
             {t("today")} ·{" "}
@@ -72,10 +89,16 @@ export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPho
         )}
       </View>
 
+      {!project && (
+        <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
+          <Muted>{t("pickProjectFirst")}</Muted>
+        </View>
+      )}
+
       <View style={{ paddingHorizontal: 16, gap: 10, marginBottom: 14 }}>
-        <BigButton label={t("addMaterial")} onPress={() => nav("item")} />
-        <BigButton label={t("addLabor")} onPress={() => nav("labor")} />
-        <BigButton label={t("addPhoto")} onPress={() => nav("photo")} tone="plain" />
+        <BigButton label={t("addMaterial")} onPress={() => nav("item")} disabled={!project} />
+        <BigButton label={t("addLabor")} onPress={() => nav("labor")} disabled={!project} />
+        <BigButton label={t("addPhoto")} onPress={() => nav("photo")} tone="plain" disabled={!project} />
       </View>
 
       {inbox.length > 0 && (

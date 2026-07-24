@@ -64,6 +64,18 @@ export const TRADES = [
 
 export const HOUR_TYPES = ["regular", "overtime", "rework"];
 
+// Areas are project-configured (schema §4.1). The 1257 pilot has its own; any
+// other Records project falls back to a generic residential set until per-
+// project config syncs from the backend.
+export const DEFAULT_AREAS = ["Interior", "Exterior", "Garage", "Sitework"];
+export function areasFor(projectName) {
+  const n = (projectName ?? "").toLowerCase();
+  if (n.includes("1257") || n.includes("bao") || n.includes("inspiration")) {
+    return PROJECT.areas;
+  }
+  return DEFAULT_AREAS;
+}
+
 export const CO_REASONS = [
   "owner_request", "unforeseen_condition", "design_change",
   "code_requirement", "error_omission",

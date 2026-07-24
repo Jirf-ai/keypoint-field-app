@@ -6,8 +6,8 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 import { BigButton, Card, Label, Muted, PickRow } from "../components/ui";
 import { phaseLabel } from "../i18n";
-import { HOUR_TYPES, PHASES, PROJECT, TRADES, validateLabor, laborWarnings } from "../schema";
-import { activeLines, activeProfile, addLine, getSettings } from "../store";
+import { HOUR_TYPES, PHASES, TRADES, areasFor, validateLabor, laborWarnings } from "../schema";
+import { activeLines, activeProfile, addLine, currentProject, getSettings } from "../store";
 import { colors } from "../theme";
 
 const FIX_KEYS = {
@@ -122,7 +122,7 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
         />
 
         <Label>{t("area")}</Label>
-        <PickRow options={PROJECT.areas} value={area} onChange={setArea} />
+        <PickRow options={areasFor(currentProject()?.name)} value={area} onChange={setArea} />
 
         <FloatingLabelInput
           label={t("note")}

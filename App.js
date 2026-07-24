@@ -201,6 +201,7 @@ export default function App() {
               setFromPhoto(p);
               setScreen("item");
             }}
+            onProjectChange={() => setTick(tick + 1)}
           />
         )}
         {authed && screen === "item" && (
