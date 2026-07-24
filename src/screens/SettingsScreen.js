@@ -14,7 +14,7 @@ const LANGS = [
   { code: "es", label: "Español" },
 ];
 
-export default function SettingsScreen({ t, onDone, onLang }) {
+export default function SettingsScreen({ t, onDone, onLang, onLogout }) {
   const st = getSettings();
   const [name, setName] = useState(st.recorded_by || "");
   const [lang, setLang] = useState(st.lang || "en");
@@ -54,6 +54,7 @@ export default function SettingsScreen({ t, onDone, onLang }) {
       <View style={{ paddingHorizontal: 16, gap: 10 }}>
         <BigButton label={t("save")} onPress={save} />
         <BigButton label={t("cancel")} onPress={onDone} tone="plain" />
+        {onLogout && <BigButton label={t("switchUser")} onPress={onLogout} tone="plain" />}
       </View>
     </ScrollView>
   );

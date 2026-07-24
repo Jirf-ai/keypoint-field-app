@@ -7,7 +7,7 @@ import FloatingLabelInput from "../components/FloatingLabelInput";
 import { BigButton, Card, Label, Muted, PickRow } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { HOUR_TYPES, PHASES, PROJECT, TRADES, validateLabor, laborWarnings } from "../schema";
-import { activeLines, addLine, getSettings } from "../store";
+import { activeLines, activeProfile, addLine, getSettings } from "../store";
 import { colors } from "../theme";
 
 const FIX_KEYS = {
@@ -21,8 +21,11 @@ const FIX_KEYS = {
 
 export default function AddLaborScreen({ t, lang, workDate, onDone }) {
   const st = getSettings();
-  const [trade, setTrade] = useState(null);
-  const [worker, setWorker] = useState(st.recorded_by || "");
+  const me = activeProfile();
+  // Logging YOUR hours is the common case: name + usual trade prefilled from
+  // the profile — two taps (hours, save) for a normal day.
+  const [trade, setTrade] = useState(me?.default_trade ?? null);
+  const [worker, setWorker] = useState(me?.display_name || st.recorded_by || "");
   const [hours, setHours] = useState("");
   const [hourType, setHourType] = useState("regular");
   const [rate, setRate] = useState("");

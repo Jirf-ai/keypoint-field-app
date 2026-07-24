@@ -21,6 +21,10 @@ function uuid() {
 
 const EMPTY = {
   project_id: PROJECT.project_id,
+  // Worker profiles (schema §4.8, minimized on purpose): name, trade,
+  // language, selfie. active_worker_id gates the app — no profile, no capture.
+  profiles: [],
+  active_worker_id: null,
   lines: [],          // items + labor, append-only ({kind: 'item'|'labor'})
   photos: [],
   change_orders: [],
@@ -65,6 +69,45 @@ export async function saveSettings(patch) {
   state.settings = { ...state.settings, ...patch };
   await persist();
   return state.settings;
+}
+
+// ------------------------------------------------------------------ profiles
+export async function createProfile({ display_name, default_trade, lang, selfie_uri }) {
+  const p = {
+    worker_id: uuid(),
+    display_name,
+    default_trade: default_trade ?? null,
+    preferred_language: lang ?? "en",
+    selfie_uri: selfie_uri ?? null,
+    role: "journeyman",
+    active: true,
+    created_at: new Date().toISOString(),
+  };
+  state.profiles.push(p);
+  return await logIn(p.worker_id);
+}
+
+export async function logIn(worker_id) {
+  const p = state.profiles.find((x) => x.worker_id === worker_id);
+  if (!p) return null;
+  state.active_worker_id = worker_id;
+  state.settings.recorded_by = p.display_name;
+  state.settings.lang = p.preferred_language ?? state.settings.lang;
+  await persist();
+  return p;
+}
+
+export async function logOut() {
+  state.active_worker_id = null;
+  await persist();
+}
+
+export function activeProfile() {
+  return state?.profiles.find((x) => x.worker_id === state.active_worker_id) ?? null;
+}
+
+export function profiles() {
+  return state?.profiles ?? [];
 }
 
 export async function addLine(entry) {

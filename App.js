@@ -2,12 +2,13 @@
 // Hand-rolled navigation (same pattern as the DD app): a screen stack in
 // state, no navigation library. The first screen is capture, always.
 import { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { Image, Platform, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import LaunchSplash, { LogoRow } from "./src/components/LaunchSplash";
 import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
-import { getSettings, load, pendingCount } from "./src/store";
+import { activeProfile, getSettings, load, logOut, pendingCount } from "./src/store";
+import AuthScreen from "./src/screens/AuthScreen";
 import AddItemScreen from "./src/screens/AddItemScreen";
 import AddLaborScreen from "./src/screens/AddLaborScreen";
 import AddPhotoScreen from "./src/screens/AddPhotoScreen";
@@ -49,9 +50,13 @@ export default function App() {
   const workDate = todayStr();
   const t = makeT(lang);
 
+  // Worker identity: no profile, no capture — first run shows log-in/create.
+  const [profile, setProfile] = useState(null);
+
   useEffect(() => {
     load().then(() => {
       setLang(getSettings().lang || "en");
+      setProfile(activeProfile());
       setReady(true);
     });
     SplashScreen.hideAsync().catch(() => {}); // overlay takes over from here
@@ -76,23 +81,32 @@ export default function App() {
   };
   const nav = (name) => setScreen(name);
   const pending = pendingCount();
+  const authed = !!profile;
+  const showLogoHeader = !authed || screen === "today";
 
   return (
     <SafeAreaView style={s.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.bg} />
       <View style={s.shell}>
         <View style={s.header}>
-          {screen !== "today" ? (
+          {!showLogoHeader ? (
             <>
               <Pressable onPress={done} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back">
                 <Text style={s.back}>‹</Text>
               </Pressable>
               <Text style={s.title}>{t(TITLES[screen])}</Text>
-              <View style={{ width: 24 }} />
+              <View style={{ width: 26 }} />
             </>
           ) : (
             <>
-              <View style={{ width: 24 }} />
+              {/* Worker avatar (their selfie) — tap for settings/switch. */}
+              {authed && profile?.selfie_uri ? (
+                <Pressable onPress={() => setScreen("settings")} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("settings")}>
+                  <Image source={{ uri: profile.selfie_uri }} style={s.avatar} />
+                </Pressable>
+              ) : (
+                <View style={{ width: 26 }} />
+              )}
               {/* The splash docks into this slot; hidden until it lands. */}
               <View
                 ref={logoSlotRef}
@@ -101,14 +115,32 @@ export default function App() {
               >
                 <LogoRow />
               </View>
-              <Pressable onPress={() => setScreen("settings")} hitSlop={12} accessibilityRole="button" accessibilityLabel={t("settings")}>
-                <Text style={s.gear}>⚙</Text>
-              </Pressable>
+              {authed ? (
+                <Pressable onPress={() => setScreen("settings")} hitSlop={12} accessibilityRole="button" accessibilityLabel={t("settings")}>
+                  <Text style={s.gear}>⚙</Text>
+                </Pressable>
+              ) : (
+                <View style={{ width: 26 }} />
+              )}
             </>
           )}
         </View>
 
-        {screen === "today" && (
+        {!authed && (
+          <AuthScreen
+            t={t}
+            lang={lang}
+            onLang={setLang}
+            onDone={(p) => {
+              setProfile(p);
+              setLang(p.preferred_language ?? lang);
+              setTick(tick + 1);
+              setScreen("today");
+            }}
+          />
+        )}
+
+        {authed && screen === "today" && (
           <TodayScreen
             key={tick}
             t={t}
@@ -122,15 +154,24 @@ export default function App() {
             }}
           />
         )}
-        {screen === "item" && (
+        {authed && screen === "item" && (
           <AddItemScreen t={t} lang={lang} workDate={workDate} onDone={done} fromPhoto={fromPhoto} />
         )}
-        {screen === "labor" && <AddLaborScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
-        {screen === "photo" && <AddPhotoScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
-        {screen === "review" && <ReviewScreen t={t} workDate={workDate} onDone={done} />}
-        {screen === "cos" && <ChangeOrdersScreen t={t} workDate={workDate} onDone={done} />}
-        {screen === "settings" && (
-          <SettingsScreen t={t} onDone={done} onLang={setLang} />
+        {authed && screen === "labor" && <AddLaborScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
+        {authed && screen === "photo" && <AddPhotoScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
+        {authed && screen === "review" && <ReviewScreen t={t} workDate={workDate} onDone={done} />}
+        {authed && screen === "cos" && <ChangeOrdersScreen t={t} workDate={workDate} onDone={done} />}
+        {authed && screen === "settings" && (
+          <SettingsScreen
+            t={t}
+            onDone={done}
+            onLang={setLang}
+            onLogout={async () => {
+              await logOut();
+              setProfile(null);
+              setScreen("today");
+            }}
+          />
         )}
       </View>
       {!splashDone && <LaunchSplash dock={dock} onDone={() => setSplashDone(true)} />}
@@ -157,6 +198,7 @@ const s = StyleSheet.create({
     paddingBottom: 10,
   },
   mark: { color: colors.brand, fontSize: 20 },
+  avatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: "#eee" },
   back: { color: colors.text, fontSize: 30, fontWeight: "700", lineHeight: 30 },
   title: { color: colors.text, fontSize: 16, fontWeight: "800", textTransform: "capitalize" },
   gear: { color: colors.textSecondary, fontSize: 20 },
