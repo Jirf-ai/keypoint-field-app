@@ -60,3 +60,23 @@ enums), Photos (naming convention log), Lists (validation sources). All enum
 columns are dropdown-constrained per Schema §5-§7 so pilot rows import without
 cleanup. Still absent (accepted): versioning/amendment trail — spreadsheet
 reality; the READ ME instructs "don't delete rows, add corrected ones."
+
+---
+
+## D-J3 — One Supabase, the existing spine (answers Tech Eval D2 ambiguity)
+
+**Decision (Jeffrey, 2026-07-24):** "We're doing one Supabase, the Supabase
+doesn't change. We're still using BOBAI and the rest." Field tables live on the
+existing spine (project `bbkeogzyqwszmijmvlmj`), keyed to the existing
+`projects` and `items` tables — no second instance, no parallel data store.
+
+Motivation includes the Record app: clients must be able to pull up past
+projects' data and material lists, which only works if field capture files
+into the same project-keyed store the Records engine reads.
+
+Implementation: `BOBAI/engines/operations/FIELD_CAPTURE_MIGRATION.sql` —
+field_logs / field_line_items / field_labor_entries / field_photos /
+field_change_orders (append-only, client-generated UUIDs for idempotent sync,
+RLS with no anon access), the D-J1 `project_items` pool seeded from bills, and
+the schema §10 ingest views for the Cost engine. Written, pending apply via
+Supabase MCP.
