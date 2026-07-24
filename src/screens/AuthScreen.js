@@ -4,7 +4,7 @@
 // capture. Local profiles for the pilot; phone-OTP auth arrives with the sync
 // backend (Tech Eval stack).
 import { useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 import { BigButton, Card, Label, Muted, PickRow } from "../components/ui";
@@ -35,6 +35,24 @@ export default function AuthScreen({ t, lang, onDone }) {
     return asset.uri;
   }
 
+  // Belt and suspenders: whatever the picker returned, guarantee a data: URI
+  // on web before it's stored (fetch the blob and re-encode). Never trust a
+  // blob: URL to outlive the session.
+  async function ensureDurable(uri) {
+    if (!uri || uri.startsWith("data:") || Platform.OS !== "web") return uri;
+    try {
+      const blob = await (await fetch(uri)).blob();
+      return await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+    } catch {
+      return uri;
+    }
+  }
+
   async function takeSelfie() {
     setErr(null);
     const opts = { quality: 0.4, allowsEditing: true, aspect: [1, 1], base64: true };
@@ -63,7 +81,7 @@ export default function AuthScreen({ t, lang, onDone }) {
       display_name: name.trim(),
       default_trade: trade,
       lang,
-      selfie_uri: selfie,
+      selfie_uri: await ensureDurable(selfie),
       phone: phone.trim() || null,
     });
     onDone(p);
