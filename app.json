@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Kaicon Field",
+    "slug": "keypoint-field-app",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "kaiconfield",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ai.jirf.kaiconfield"
+    },
+    "android": {
+      "package": "ai.jirf.kaiconfield",
+      "adaptiveIcon": {
+        "backgroundColor": "#FAF6EF",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Kaicon Field uses the camera to photograph completed work for the daily log.",
+          "photosPermission": "Kaicon Field attaches your site photos to the daily log."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 140,
+          "backgroundColor": "#FAF6EF"
+        }
+      ]
+    ]
+  }
+}
