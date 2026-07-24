@@ -8,7 +8,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import * as ImagePicker from "expo-image-picker";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 import { BigButton, Card, Label, Muted, PickRow } from "../components/ui";
-import { TRADES } from "../schema";
+import { REQUIRE_PHONE_VERIFICATION, TRADES } from "../schema";
 import { createProfile, logIn, profiles } from "../store";
 import { colors, radius } from "../theme";
 
@@ -16,9 +16,16 @@ export default function AuthScreen({ t, lang, onDone }) {
   const existing = profiles();
   const [creating, setCreating] = useState(existing.length === 0);
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [trade, setTrade] = useState(null);
   const [selfie, setSelfie] = useState(null);
   const [err, setErr] = useState(null);
+  // Phone confirmation step — rendered only when the public-release flag is
+  // on. Verification will run through Supabase phone-OTP; until that backend
+  // exists this UI is the contract, not the implementation.
+  const [verifying, setVerifying] = useState(false);
+  const [code, setCode] = useState("");
+  const [codeErr, setCodeErr] = useState(false);
 
   async function takeSelfie() {
     setErr(null);
@@ -44,15 +51,36 @@ export default function AuthScreen({ t, lang, onDone }) {
     }
   }
 
-  async function create() {
-    if (!name.trim() || !selfie) return;
+  async function finishCreate() {
     const p = await createProfile({
       display_name: name.trim(),
       default_trade: trade,
       lang,
       selfie_uri: selfie,
+      phone: phone.trim() || null,
     });
     onDone(p);
+  }
+
+  async function create() {
+    if (!name.trim() || !selfie) return;
+    if (REQUIRE_PHONE_VERIFICATION) {
+      if (!phone.trim()) return;
+      // Public release: request OTP here (supabase.auth.signInWithOtp phone),
+      // then collect the code below.
+      setVerifying(true);
+      return;
+    }
+    await finishCreate(); // pilot/internal: bypass on our terms
+  }
+
+  async function verifyCode() {
+    // Public release: supabase.auth.verifyOtp({ phone, token: code }).
+    if (code.trim().length !== 6) {
+      setCodeErr(true);
+      return;
+    }
+    await finishCreate();
   }
 
   async function pick(worker_id) {
@@ -100,7 +128,15 @@ export default function AuthScreen({ t, lang, onDone }) {
           <Card>
             <Label>{t("createAccount")}</Label>
             <Muted style={{ marginBottom: 12 }}>{t("whoAreYouHint")}</Muted>
-            <FloatingLabelInput label={t("yourName")} value={name} onChangeText={setName} />
+            <FloatingLabelInput label={t("yourName")} value={name} onChangeText={setName} style={{ marginBottom: 10 }} />
+            <FloatingLabelInput
+              label={t("phone")}
+              value={phone}
+              onChangeText={(x) => setPhone(x.replace(/[^0-9+() -]/g, ""))}
+              keyboardType="phone-pad"
+              autoCapitalize="none"
+            />
+            <Muted style={{ marginTop: 6 }}>{t("phoneHint")}</Muted>
             <Label>{t("yourTrade")}</Label>
             <PickRow options={TRADES} value={trade} onChange={setTrade} renderLabel={(o) => o[lang] ?? o.en} />
           </Card>
@@ -119,12 +155,41 @@ export default function AuthScreen({ t, lang, onDone }) {
             {err && <Text style={s.err}>{err}</Text>}
           </Card>
 
-          <View style={{ paddingHorizontal: 16, gap: 10 }}>
-            <BigButton label={t("start")} onPress={create} disabled={!name.trim() || !selfie} />
-            {existing.length > 0 && (
-              <BigButton label={t("logIn")} onPress={() => setCreating(false)} tone="plain" />
-            )}
-          </View>
+          {verifying && (
+            <Card>
+              <Label>{t("enterCode")}</Label>
+              <FloatingLabelInput
+                label="______"
+                value={code}
+                onChangeText={(x) => {
+                  setCode(x.replace(/[^0-9]/g, "").slice(0, 6));
+                  setCodeErr(false);
+                }}
+                keyboardType="number-pad"
+                autoCapitalize="none"
+              />
+              {codeErr && <Text style={s.err}>{t("codeWrong")}</Text>}
+              <View style={{ gap: 10, marginTop: 12 }}>
+                <BigButton label={t("verify")} onPress={verifyCode} disabled={code.length !== 6} />
+                <BigButton label={t("cancel")} onPress={() => setVerifying(false)} tone="plain" />
+              </View>
+            </Card>
+          )}
+
+          {!verifying && (
+            <View style={{ paddingHorizontal: 16, gap: 10 }}>
+              <BigButton
+                label={REQUIRE_PHONE_VERIFICATION ? t("sendCode") : t("start")}
+                onPress={create}
+                disabled={
+                  !name.trim() || !selfie || (REQUIRE_PHONE_VERIFICATION && !phone.trim())
+                }
+              />
+              {existing.length > 0 && (
+                <BigButton label={t("logIn")} onPress={() => setCreating(false)} tone="plain" />
+              )}
+            </View>
+          )}
         </>
       )}
     </ScrollView>

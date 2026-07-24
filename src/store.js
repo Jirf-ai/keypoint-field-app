@@ -72,13 +72,15 @@ export async function saveSettings(patch) {
 }
 
 // ------------------------------------------------------------------ profiles
-export async function createProfile({ display_name, default_trade, lang, selfie_uri }) {
+export async function createProfile({ display_name, default_trade, lang, selfie_uri, phone }) {
   const p = {
     worker_id: uuid(),
     display_name,
     default_trade: default_trade ?? null,
     preferred_language: lang ?? "en",
     selfie_uri: selfie_uri ?? null,
+    phone: phone ?? null,          // verified via OTP at public release
+    phone_verified: false,
     role: "journeyman",
     active: true,
     created_at: new Date().toISOString(),

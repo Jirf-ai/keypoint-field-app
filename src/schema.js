@@ -2,6 +2,14 @@
 // The app captures; it computes nothing beyond qty × cost display math (which
 // the schema itself defines as a computed column).
 
+// Phone verification gate (decided Jeffrey 2026-07-24): the create-account
+// flow captures a phone number and shows the confirmation-code step ONLY when
+// this is true. Kept FALSE for internal testing/pilot ("bypass on our terms");
+// flip TRUE for the public release — requires Supabase phone-OTP + an SMS
+// provider wired in (Tech Eval auth stack). The UI for the code step ships
+// now so going public is a flag flip + backend, not a redesign.
+export const REQUIRE_PHONE_VERIFICATION = false;
+
 // §4.1 project — the pilot. v1 is one project at a time (PRD §4 non-goals).
 export const PROJECT = {
   project_id: "1257-INSP",

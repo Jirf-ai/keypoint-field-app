@@ -104,6 +104,12 @@ export const STRINGS = {
     selfieWhy: "Your photo goes on your profile so the crew log shows who's who.",
     pickProfile: "Tap your name to log in",
     switchUser: "Switch worker / Log out",
+    phone: "Phone number",
+    phoneHint: "Your number confirms your account when the app goes public.",
+    sendCode: "Send confirmation code",
+    enterCode: "Enter the 6-digit code we texted you",
+    verify: "Verify",
+    codeWrong: "That code doesn't match — check the text and try again.",
   },
   es: {
     today: "Hoy",
@@ -206,6 +212,12 @@ export const STRINGS = {
     selfieWhy: "Su foto va en su perfil para que el registro muestre quién es quién.",
     pickProfile: "Toque su nombre para entrar",
     switchUser: "Cambiar trabajador / Salir",
+    phone: "Número de teléfono",
+    phoneHint: "Su número confirma su cuenta cuando la app sea pública.",
+    sendCode: "Enviar código de confirmación",
+    enterCode: "Ingrese el código de 6 dígitos que le enviamos",
+    verify: "Verificar",
+    codeWrong: "Ese código no coincide — revise el mensaje e intente de nuevo.",
   },
 };
 
