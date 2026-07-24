@@ -27,24 +27,31 @@ export default function AuthScreen({ t, lang, onDone }) {
   const [code, setCode] = useState("");
   const [codeErr, setCodeErr] = useState(false);
 
+  // Selfies persist as base64 data URIs — a blob: URL dies on page reload
+  // (web) and a cache path can be evicted (native). A profile photo must
+  // survive forever; it's small (square-cropped, half quality).
+  function assetToUri(asset) {
+    if (asset.base64) return `data:image/jpeg;base64,${asset.base64}`;
+    return asset.uri;
+  }
+
   async function takeSelfie() {
     setErr(null);
+    const opts = { quality: 0.4, allowsEditing: true, aspect: [1, 1], base64: true };
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       const res = perm.granted
         ? await ImagePicker.launchCameraAsync({
-            quality: 0.5,
+            ...opts,
             cameraType: ImagePicker.CameraType?.front,
-            allowsEditing: true,
-            aspect: [1, 1],
           })
-        : await ImagePicker.launchImageLibraryAsync({ quality: 0.5, allowsEditing: true, aspect: [1, 1] });
-      if (!res.canceled && res.assets?.[0]?.uri) setSelfie(res.assets[0].uri);
+        : await ImagePicker.launchImageLibraryAsync(opts);
+      if (!res.canceled && res.assets?.[0]) setSelfie(assetToUri(res.assets[0]));
     } catch {
       // Web fallback: camera unsupported → library picker.
       try {
-        const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.5 });
-        if (!res.canceled && res.assets?.[0]?.uri) setSelfie(res.assets[0].uri);
+        const res = await ImagePicker.launchImageLibraryAsync(opts);
+        if (!res.canceled && res.assets?.[0]) setSelfie(assetToUri(res.assets[0]));
       } catch (e2) {
         setErr(String(e2?.message ?? e2));
       }

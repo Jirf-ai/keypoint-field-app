@@ -21,6 +21,26 @@ import { colors } from "./src/theme";
 // Hold the native splash until the animated overlay is on screen.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+// Worker avatar with a dead-image fallback: old profiles may hold a blob: URI
+// that didn't survive a reload — show their initial rather than a gray dot.
+function ProfileAvatar({ profile }) {
+  const [broken, setBroken] = useState(false);
+  if (!profile?.selfie_uri || broken) {
+    return (
+      <View style={[s.avatar, s.avatarEmpty]}>
+        <Text style={s.avatarInitial}>{profile?.display_name?.[0] ?? "?"}</Text>
+      </View>
+    );
+  }
+  return (
+    <Image
+      source={{ uri: profile.selfie_uri }}
+      style={s.avatar}
+      onError={() => setBroken(true)}
+    />
+  );
+}
+
 // Compact language switch — always available, top right (Jeffrey 2026-07-24).
 function LangToggle({ lang, onLang }) {
   return (
@@ -123,22 +143,25 @@ export default function App() {
             </>
           ) : (
             <>
+              {/* True centering: the logo sits in an absolute overlay so the
+                  avatar/lang cluster widths can't push it off-center. */}
+              <View pointerEvents="none" style={s.headerCenter}>
+                <View
+                  ref={logoSlotRef}
+                  collapsable={false}
+                  style={{ opacity: splashDone ? 1 : 0 }}
+                >
+                  <LogoRow />
+                </View>
+              </View>
               {/* Worker avatar (their selfie) — tap for settings/switch. */}
-              {authed && profile?.selfie_uri ? (
+              {authed ? (
                 <Pressable onPress={() => setScreen("settings")} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("settings")}>
-                  <Image source={{ uri: profile.selfie_uri }} style={s.avatar} />
+                  <ProfileAvatar profile={profile} />
                 </Pressable>
               ) : (
                 <View style={{ width: 26 }} />
               )}
-              {/* The splash docks into this slot; hidden until it lands. */}
-              <View
-                ref={logoSlotRef}
-                collapsable={false}
-                style={{ opacity: splashDone ? 1 : 0 }}
-              >
-                <LogoRow />
-              </View>
               <View style={s.headerRight}>
                 <LangToggle lang={lang} onLang={changeLang} />
                 {authed && (
@@ -222,6 +245,18 @@ const s = StyleSheet.create({
   },
   mark: { color: colors.brand, fontSize: 20 },
   avatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: "#eee" },
+  avatarEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTint },
+  avatarInitial: { color: colors.brand, fontSize: 15, fontWeight: "800" },
+  headerCenter: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    paddingBottom: 10,
+  },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
   langWrap: {
     flexDirection: "row",
