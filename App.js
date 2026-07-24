@@ -42,6 +42,10 @@ export default function App() {
   const [dock, setDock] = useState(null);
   const [splashDone, setSplashDone] = useState(false);
 
+  // Photo-first flow: an inbox photo tapped on Today opens the material form
+  // with the photo attached (linked to the new line on save).
+  const [fromPhoto, setFromPhoto] = useState(null);
+
   const workDate = todayStr();
   const t = makeT(lang);
 
@@ -67,6 +71,7 @@ export default function App() {
 
   const done = () => {
     setTick(tick + 1);
+    setFromPhoto(null);
     setScreen("today");
   };
   const nav = (name) => setScreen(name);
@@ -104,9 +109,22 @@ export default function App() {
         </View>
 
         {screen === "today" && (
-          <TodayScreen key={tick} t={t} lang={lang} workDate={workDate} pending={pending} nav={nav} />
+          <TodayScreen
+            key={tick}
+            t={t}
+            lang={lang}
+            workDate={workDate}
+            pending={pending}
+            nav={nav}
+            onFillPhoto={(p) => {
+              setFromPhoto(p);
+              setScreen("item");
+            }}
+          />
         )}
-        {screen === "item" && <AddItemScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
+        {screen === "item" && (
+          <AddItemScreen t={t} lang={lang} workDate={workDate} onDone={done} fromPhoto={fromPhoto} />
+        )}
         {screen === "labor" && <AddLaborScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
         {screen === "photo" && <AddPhotoScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
         {screen === "review" && <ReviewScreen t={t} workDate={workDate} onDone={done} />}

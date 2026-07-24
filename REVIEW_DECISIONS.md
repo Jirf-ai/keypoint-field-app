@@ -80,3 +80,26 @@ field_change_orders (append-only, client-generated UUIDs for idempotent sync,
 RLS with no anon access), the D-J1 `project_items` pool seeded from bills, and
 the schema §10 ingest views for the Cost engine. Written, pending apply via
 Supabase MCP.
+
+---
+
+## D-J4 — Photo-first capture is the expected dominant path
+
+**Observation (Jeffrey, 2026-07-24):** "on-site workers will be too busy/lazy
+to type all the info in — image taking will probably be the most used resource
+to record materials." Treat the camera as the front door, typing as the site
+manager's end-of-day step (the PRD already makes the site manager own data
+quality in their 3-5 minutes).
+
+**Implemented (v0):** photos attach to specific line items (schema §4.5
+line_id); unlinked photos form a "N photos need details" inbox strip on Today
+— snap all day with zero typing, tap a photo later and the material form opens
+with the photo attached, linking on save. Linked lines show a camera marker.
+
+**Roadmap consequence:** this raises the priority of (a) barcode/QR scan
+(PRD should-have — needs a UPC column + mapping on the items catalog; the
+pilot's photo-line pairs effectively build that map), and (b) vision AI
+drafting lines from photos/receipts (platform already runs vision in
+understand-input; paid call, post-pilot). Principle: the camera accelerates
+entry, never gates it — and a photo alone is evidence, not cost data; the
+numbers always get confirmed by a human (or AI-drafted then confirmed).

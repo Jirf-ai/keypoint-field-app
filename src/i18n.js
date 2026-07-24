@@ -88,6 +88,8 @@ export const STRINGS = {
     photosToday: "photos today",
     est: "est.",
     linkLine: "Which entry is this photo of? (optional)",
+    needDetails: "photos need details",
+    needDetailsHint: "Snap now, fill in later — tap a photo to add what it was and what it cost.",
   },
   es: {
     today: "Hoy",
@@ -174,6 +176,8 @@ export const STRINGS = {
     photosToday: "fotos hoy",
     est: "est.",
     linkLine: "¿De qué registro es esta foto? (opcional)",
+    needDetails: "fotos necesitan datos",
+    needDetailsHint: "Tome la foto ahora, complete después — toque una foto para poner qué fue y cuánto costó.",
   },
 };
 

@@ -2,12 +2,12 @@
 // isn't essential is a reason to abandon the app (PRD §3), so: description,
 // qty, unit, cost, one-tap cost class, phase/area preloaded from last use.
 import { useState } from "react";
-import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 import { BigButton, Card, Label, Muted, PickRow } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { COST_CLASSES, PHASES, PROJECT, UNITS, validateLineItem, lineWarnings } from "../schema";
-import { activeLines, addLine, changeOrders, getSettings } from "../store";
+import { activeLines, addLine, changeOrders, getSettings, linkPhoto } from "../store";
 import { CLASS_COLORS, colors } from "../theme";
 
 const FIX_KEYS = {
@@ -20,7 +20,9 @@ const FIX_KEYS = {
   V_area: "fixArea",
 };
 
-export default function AddItemScreen({ t, lang, workDate, onDone }) {
+// fromPhoto: photo-first flow — the material was photographed earlier; this
+// form fills in its details and links the photo to the new line on save.
+export default function AddItemScreen({ t, lang, workDate, onDone, fromPhoto }) {
   const st = getSettings();
   const [desc, setDesc] = useState("");
   const [sku, setSku] = useState("");
@@ -65,7 +67,8 @@ export default function AddItemScreen({ t, lang, workDate, onDone }) {
     }
     // Warnings NEVER block capture (schema §8) — save first, mention after.
     const warns = lineWarnings(entry, activeLines(workDate));
-    await addLine(entry);
+    const saved = await addLine(entry);
+    if (fromPhoto?.photo_id) await linkPhoto(fromPhoto.photo_id, saved.line_id);
     if (warns.includes("V8_duplicate") && !warned) {
       setWarned("warnDup");
       setTimeout(onDone, 1600);
@@ -77,6 +80,12 @@ export default function AddItemScreen({ t, lang, workDate, onDone }) {
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
       <Card>
+        {fromPhoto?.uri && (
+          <View style={s.photoRow}>
+            <Image source={{ uri: fromPhoto.uri }} style={s.photoThumb} resizeMode="cover" />
+            <Muted style={{ flex: 1 }}>{fromPhoto.caption ?? fromPhoto.filename}</Muted>
+          </View>
+        )}
         <FloatingLabelInput label={t("whatUsed")} value={desc} onChangeText={setDesc} style={s.gap} />
         <View style={[s.row, s.gap]}>
           <View style={{ flex: 1 }}>
@@ -176,6 +185,8 @@ export default function AddItemScreen({ t, lang, workDate, onDone }) {
 }
 
 const s = StyleSheet.create({
+  photoRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  photoThumb: { width: 64, height: 64, borderRadius: 10, backgroundColor: "#eee" },
   row: { flexDirection: "row", gap: 10 },
   gap: { marginBottom: 10 },
   gapTop: { marginTop: 8 },

@@ -1,7 +1,7 @@
 // Today — the first screen after opening is CAPTURE, not a dashboard
 // (PRD §6.1 design constraint). Three big buttons, today's entries below,
 // pending-sync badge always visible (silence breeds distrust — Tech Eval §6.3).
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { BigButton, Card, Muted } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { PROJECT } from "../schema";
@@ -41,11 +41,14 @@ function LineRow({ l, lang, photoCount }) {
   );
 }
 
-export default function TodayScreen({ t, lang, workDate, pending, nav }) {
+export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPhoto }) {
   const lines = activeLines(workDate);
   const photos = photosFor(workDate);
   const totals = todayTotals(workDate);
   const status = dayStatus(workDate);
+  // Photo-first reality: crews snap, they don't type. Unlinked photos are the
+  // day's to-do — each tap opens the material form with the photo attached.
+  const inbox = photos.filter((p) => !p.line_id);
 
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
@@ -66,6 +69,29 @@ export default function TodayScreen({ t, lang, workDate, pending, nav }) {
         <BigButton label={t("addLabor")} onPress={() => nav("labor")} />
         <BigButton label={t("addPhoto")} onPress={() => nav("photo")} tone="plain" />
       </View>
+
+      {inbox.length > 0 && (
+        <Card>
+          <Text style={s.inboxTitle}>
+            📷 {inbox.length} {t("needDetails")}
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={s.inboxRow}>
+              {inbox.map((p) => (
+                <Pressable
+                  key={p.photo_id}
+                  onPress={() => onFillPhoto(p)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("needDetails")}
+                >
+                  <Image source={{ uri: p.uri }} style={s.inboxThumb} resizeMode="cover" />
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+          <Muted style={{ marginTop: 8 }}>{t("needDetailsHint")}</Muted>
+        </Card>
+      )}
 
       <Card>
         {lines.length === 0 && photos.length === 0 ? (
@@ -142,4 +168,14 @@ const s = StyleSheet.create({
   lineTitle: { color: colors.text, fontSize: 14.5, fontWeight: "600" },
   lineMeta: { color: colors.textMuted, fontSize: 12.5, marginTop: 1 },
   lineAmt: { color: colors.text, fontSize: 14.5, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  inboxTitle: { color: colors.text, fontWeight: "800", fontSize: 15, marginBottom: 10 },
+  inboxRow: { flexDirection: "row", gap: 8 },
+  inboxThumb: {
+    width: 74,
+    height: 74,
+    borderRadius: 10,
+    backgroundColor: "#eee",
+    borderWidth: 2,
+    borderColor: colors.brand,
+  },
 });

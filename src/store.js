@@ -104,6 +104,17 @@ export async function addPhoto(photo) {
   return p;
 }
 
+// Attach an already-captured photo to a line created later (photo-first flow:
+// crews snap now, the site manager fills in details at end of day).
+export async function linkPhoto(photo_id, line_id) {
+  const p = state.photos.find((x) => x.photo_id === photo_id);
+  if (p) {
+    p.line_id = line_id;
+    await persist();
+  }
+  return p;
+}
+
 export async function addChangeOrder(co) {
   const rec = stamp({ co_id: uuid(), status: "pending", ...co });
   state.change_orders.push(rec);
