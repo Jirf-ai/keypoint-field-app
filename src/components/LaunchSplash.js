@@ -26,7 +26,7 @@ export function LogoRow({ gemTransform }) {
           <View style={l.gemShape} />
         </Animated.View>
       </View>
-      <Text style={l.wordmark}>Keypoint Field — Today</Text>
+      <Text style={l.wordmark}>Keypoint Field</Text>
     </View>
   );
 }

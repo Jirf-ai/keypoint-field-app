@@ -55,7 +55,15 @@ export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPho
       <View style={s.projRow}>
         <View style={{ flex: 1 }}>
           <Text style={s.projName} numberOfLines={1}>{PROJECT.name}</Text>
-          <Muted>{workDate}{status !== "draft" ? ` · ${t(status === "amended" ? "amended" : "submitted")}` : ""}</Muted>
+          {/* TODAY = the actual date, its own element — never part of the logo. */}
+          <Text style={s.dateLine}>
+            {t("today")} ·{" "}
+            {new Date(workDate + "T12:00:00").toLocaleDateString(
+              lang === "es" ? "es-MX" : "en-US",
+              { weekday: "short", month: "short", day: "numeric", year: "numeric" }
+            )}
+            {status !== "draft" ? `  ·  ${t(status === "amended" ? "amended" : "submitted")}` : ""}
+          </Text>
         </View>
         {pending > 0 && (
           <View style={s.pendingBadge}>
@@ -139,6 +147,7 @@ const s = StyleSheet.create({
     gap: 10,
   },
   projName: { color: colors.text, fontSize: 16, fontWeight: "800" },
+  dateLine: { color: colors.brand, fontSize: 13.5, fontWeight: "700", marginTop: 2 },
   pendingBadge: {
     backgroundColor: "#FEF6E7",
     borderRadius: 999,

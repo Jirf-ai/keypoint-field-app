@@ -12,12 +12,7 @@ import { TRADES } from "../schema";
 import { createProfile, logIn, profiles } from "../store";
 import { colors, radius } from "../theme";
 
-const LANGS = [
-  { code: "en", label: "English" },
-  { code: "es", label: "Español" },
-];
-
-export default function AuthScreen({ t, lang, onLang, onDone }) {
+export default function AuthScreen({ t, lang, onDone }) {
   const existing = profiles();
   const [creating, setCreating] = useState(existing.length === 0);
   const [name, setName] = useState("");
@@ -105,18 +100,7 @@ export default function AuthScreen({ t, lang, onLang, onDone }) {
           <Card>
             <Label>{t("createAccount")}</Label>
             <Muted style={{ marginBottom: 12 }}>{t("whoAreYouHint")}</Muted>
-            <View style={s.langRow}>
-              {LANGS.map((l) => (
-                <BigButton
-                  key={l.code}
-                  label={l.label}
-                  onPress={() => onLang(l.code)}
-                  tone={lang === l.code ? "brand" : "plain"}
-                  style={{ flex: 1 }}
-                />
-              ))}
-            </View>
-            <FloatingLabelInput label={t("yourName")} value={name} onChangeText={setName} style={{ marginTop: 12 }} />
+            <FloatingLabelInput label={t("yourName")} value={name} onChangeText={setName} />
             <Label>{t("yourTrade")}</Label>
             <PickRow options={TRADES} value={trade} onChange={setTrade} renderLabel={(o) => o[lang] ?? o.en} />
           </Card>
@@ -154,7 +138,6 @@ const s = StyleSheet.create({
   avatarEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTint },
   avatarInitial: { color: colors.brand, fontSize: 28, fontWeight: "800" },
   profileName: { color: colors.text, fontSize: 13.5, fontWeight: "700", marginTop: 6 },
-  langRow: { flexDirection: "row", gap: 10 },
   selfieRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   selfieBig: { width: 96, height: 96, borderRadius: 48, backgroundColor: "#eee" },
   err: { color: colors.red, marginTop: 8, fontSize: 13.5 },

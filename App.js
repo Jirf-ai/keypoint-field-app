@@ -7,7 +7,7 @@ import * as SplashScreen from "expo-splash-screen";
 import LaunchSplash, { LogoRow } from "./src/components/LaunchSplash";
 import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
-import { activeProfile, getSettings, load, logOut, pendingCount } from "./src/store";
+import { activeProfile, getSettings, load, logOut, pendingCount, saveSettings } from "./src/store";
 import AuthScreen from "./src/screens/AuthScreen";
 import AddItemScreen from "./src/screens/AddItemScreen";
 import AddLaborScreen from "./src/screens/AddLaborScreen";
@@ -20,6 +20,26 @@ import { colors } from "./src/theme";
 
 // Hold the native splash until the animated overlay is on screen.
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Compact language switch — always available, top right (Jeffrey 2026-07-24).
+function LangToggle({ lang, onLang }) {
+  return (
+    <View style={s.langWrap}>
+      {["en", "es"].map((c) => (
+        <Pressable
+          key={c}
+          onPress={() => onLang(c)}
+          style={[s.langBtn, lang === c && s.langOn]}
+          accessibilityRole="button"
+          accessibilityState={{ selected: lang === c }}
+          accessibilityLabel={c === "en" ? "English" : "Español"}
+        >
+          <Text style={[s.langText, lang === c && s.langTextOn]}>{c.toUpperCase()}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
 
 const TITLES = {
   today: "today",
@@ -83,6 +103,10 @@ export default function App() {
   const pending = pendingCount();
   const authed = !!profile;
   const showLogoHeader = !authed || screen === "today";
+  const changeLang = (c) => {
+    setLang(c);
+    saveSettings({ lang: c }); // persists; fire-and-forget
+  };
 
   return (
     <SafeAreaView style={s.root}>
@@ -115,13 +139,14 @@ export default function App() {
               >
                 <LogoRow />
               </View>
-              {authed ? (
-                <Pressable onPress={() => setScreen("settings")} hitSlop={12} accessibilityRole="button" accessibilityLabel={t("settings")}>
-                  <Text style={s.gear}>⚙</Text>
-                </Pressable>
-              ) : (
-                <View style={{ width: 26 }} />
-              )}
+              <View style={s.headerRight}>
+                <LangToggle lang={lang} onLang={changeLang} />
+                {authed && (
+                  <Pressable onPress={() => setScreen("settings")} hitSlop={12} accessibilityRole="button" accessibilityLabel={t("settings")}>
+                    <Text style={s.gear}>⚙</Text>
+                  </Pressable>
+                )}
+              </View>
             </>
           )}
         </View>
@@ -130,7 +155,6 @@ export default function App() {
           <AuthScreen
             t={t}
             lang={lang}
-            onLang={setLang}
             onDone={(p) => {
               setProfile(p);
               setLang(p.preferred_language ?? lang);
@@ -165,7 +189,6 @@ export default function App() {
           <SettingsScreen
             t={t}
             onDone={done}
-            onLang={setLang}
             onLogout={async () => {
               await logOut();
               setProfile(null);
@@ -199,6 +222,18 @@ const s = StyleSheet.create({
   },
   mark: { color: colors.brand, fontSize: 20 },
   avatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: "#eee" },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
+  langWrap: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  langBtn: { paddingVertical: 4, paddingHorizontal: 9 },
+  langOn: { backgroundColor: colors.brand },
+  langText: { color: colors.textSecondary, fontSize: 11.5, fontWeight: "800" },
+  langTextOn: { color: "#fff" },
   back: { color: colors.text, fontSize: 30, fontWeight: "700", lineHeight: 30 },
   title: { color: colors.text, fontSize: 16, fontWeight: "800", textTransform: "capitalize" },
   gear: { color: colors.textSecondary, fontSize: 20 },

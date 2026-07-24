@@ -9,38 +9,20 @@ import { PROJECT } from "../schema";
 import { getSettings, saveSettings } from "../store";
 import { colors } from "../theme";
 
-const LANGS = [
-  { code: "en", label: "English" },
-  { code: "es", label: "Español" },
-];
-
-export default function SettingsScreen({ t, onDone, onLang, onLogout }) {
+// Language moved to the always-visible header toggle (Jeffrey 2026-07-24).
+export default function SettingsScreen({ t, onDone, onLogout }) {
   const st = getSettings();
   const [name, setName] = useState(st.recorded_by || "");
-  const [lang, setLang] = useState(st.lang || "en");
 
   async function save() {
-    await saveSettings({ recorded_by: name.trim(), lang });
-    onLang(lang);
+    await saveSettings({ recorded_by: name.trim() });
     onDone();
   }
 
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
       <Card>
-        <FloatingLabelInput label={t("yourName")} value={name} onChangeText={setName} style={{ marginBottom: 12 }} />
-        <Label>{t("language")}</Label>
-        <View style={s.langRow}>
-          {LANGS.map((l) => (
-            <BigButton
-              key={l.code}
-              label={l.label}
-              onPress={() => setLang(l.code)}
-              tone={lang === l.code ? "brand" : "plain"}
-              style={{ flex: 1 }}
-            />
-          ))}
-        </View>
+        <FloatingLabelInput label={t("yourName")} value={name} onChangeText={setName} />
       </Card>
       <Card>
         <Label>{PROJECT.project_id}</Label>
@@ -61,6 +43,5 @@ export default function SettingsScreen({ t, onDone, onLang, onLogout }) {
 }
 
 const s = StyleSheet.create({
-  langRow: { flexDirection: "row", gap: 10 },
   proj: { color: colors.text, fontWeight: "700", fontSize: 15, marginBottom: 4 },
 });
