@@ -3,7 +3,7 @@
 // tighter match). A brand-new worker sees "Find your project" and searches;
 // recents make every later switch two taps and work offline.
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import { searchProjects } from "../api";
 import FloatingLabelInput from "./FloatingLabelInput";
 import { Card, Label, Muted } from "./ui";
@@ -45,20 +45,55 @@ export default function ProjectPicker({ t, current, recents, onSelect }) {
 
   const otherRecents = recents.filter((r) => r.id !== current?.id);
 
+  // No project yet = the ONE thing to do. Render a full-width brand CTA with a
+  // slow breathing pulse until it's tapped; once a project exists, collapse to
+  // the compact address row.
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (current || open) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [current, open]);
+
   return (
     <View>
-      <Pressable
-        onPress={() => setOpen(!open)}
-        style={s.head}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        accessibilityLabel={current?.name ?? t("findProject")}
-      >
-        <Text style={[s.name, !current && s.namePlaceholder]} numberOfLines={1}>
-          {current?.name ?? t("findProject")}
-        </Text>
-        <Text style={s.chev}>{open ? "▴" : "▾"}</Text>
-      </Pressable>
+      {!current && !open ? (
+        <Animated.View
+          style={{
+            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] }) }],
+          }}
+        >
+          <Pressable
+            onPress={() => setOpen(true)}
+            style={({ pressed }) => [s.cta, pressed && { opacity: 0.85 }]}
+            accessibilityRole="button"
+            accessibilityLabel={t("findProject")}
+          >
+            <Text style={s.ctaIcon}>🔍</Text>
+            <Text style={s.ctaText}>{t("findProject")}</Text>
+            <Text style={s.ctaChev}>▾</Text>
+          </Pressable>
+        </Animated.View>
+      ) : (
+        <Pressable
+          onPress={() => setOpen(!open)}
+          style={s.head}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: open }}
+          accessibilityLabel={current?.name ?? t("findProject")}
+        >
+          <Text style={[s.name, !current && s.namePlaceholder]} numberOfLines={1}>
+            {current?.name ?? t("findProject")}
+          </Text>
+          <Text style={s.chev}>{open ? "▴" : "▾"}</Text>
+        </Pressable>
+      )}
 
       {open && (
         <Card style={s.drop}>
@@ -94,6 +129,24 @@ export default function ProjectPicker({ t, current, recents, onSelect }) {
 }
 
 const s = StyleSheet.create({
+  cta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: colors.brand,
+    borderRadius: radius.input,
+    minHeight: 58,
+    paddingHorizontal: 18,
+    shadowColor: colors.brand,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  ctaIcon: { fontSize: 18 },
+  ctaText: { color: "#fff", fontSize: 17, fontWeight: "800", letterSpacing: 0.2 },
+  ctaChev: { color: "#fff", fontSize: 15, fontWeight: "800" },
   head: {
     flexDirection: "row",
     alignItems: "center",
