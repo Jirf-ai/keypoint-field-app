@@ -43,3 +43,20 @@ Schema §4.7 and §10 — the pool is where observations attach.
 **Implementation home:** BOBAI engine work (migration on the existing Supabase
 spine), per the house rule that engine capability lands in BOBAI first and
 apps consume it. Not yet built; blocked on nothing but sequencing.
+
+---
+
+## D-J2 — Interim spreadsheet closes two "known gaps" (Schema §9)
+
+`Kaicon_Field_1257.xlsx` (built 2026-07-24, in this repo) upgrades the interim
+capture beyond the schema doc's expectations: **`hour_type`
+(regular/overtime/rework) and `qty_is_estimated` are real validated columns**,
+not `[rework]`/`[est]` note tags — the schema itself calls rework "the one
+worth working around manually," so the instrument captures it first-class from
+day one. Sheets: READ ME (project block + crew instructions incl. M-vs-F
+boundary rule and photo naming), Daily Items (M/F/E/S line items, auto
+line_total), Labor (always-L, hour_type dropdown), Change Orders (reason/status
+enums), Photos (naming convention log), Lists (validation sources). All enum
+columns are dropdown-constrained per Schema §5-§7 so pilot rows import without
+cleanup. Still absent (accepted): versioning/amendment trail — spreadsheet
+reality; the READ ME instructs "don't delete rows, add corrected ones."
