@@ -12,7 +12,7 @@ function usd(n) {
   return `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-function LineRow({ l, lang }) {
+function LineRow({ l, lang, photoCount }) {
   const cc = CLASS_COLORS[l.cost_class] ?? CLASS_COLORS.M;
   const isLabor = l.kind === "labor";
   const title = isLabor ? `${l.worker} — ${l.hours}h` : l.description;
@@ -29,6 +29,7 @@ function LineRow({ l, lang }) {
           {title}
           {l.hour_type === "rework" ? "  ⟲" : ""}
           {l.qty_is_estimated ? "  ~" : ""}
+          {photoCount ? `  📷${photoCount > 1 ? photoCount : ""}` : ""}
         </Text>
         <Text style={s.lineMeta} numberOfLines={1}>
           {phaseLabel(l.phase, lang)} · {l.area}
@@ -79,7 +80,12 @@ export default function TodayScreen({ t, lang, workDate, pending, nav }) {
               </Text>
             </View>
             {lines.map((l) => (
-              <LineRow key={l.line_id} l={l} lang={lang} />
+              <LineRow
+                key={l.line_id}
+                l={l}
+                lang={lang}
+                photoCount={photos.filter((p) => p.line_id === l.line_id).length}
+              />
             ))}
           </>
         )}

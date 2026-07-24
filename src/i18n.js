@@ -87,6 +87,7 @@ export const STRINGS = {
     amended: "amended",
     photosToday: "photos today",
     est: "est.",
+    linkLine: "Which entry is this photo of? (optional)",
   },
   es: {
     today: "Hoy",
@@ -172,6 +173,7 @@ export const STRINGS = {
     amended: "corregido",
     photosToday: "fotos hoy",
     est: "est.",
+    linkLine: "¿De qué registro es esta foto? (opcional)",
   },
 };
 

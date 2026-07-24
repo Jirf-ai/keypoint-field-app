@@ -9,7 +9,7 @@ import FloatingLabelInput from "../components/FloatingLabelInput";
 import { BigButton, Card, Label, Muted, PickRow } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { PHASES, PROJECT, photoFilename } from "../schema";
-import { addPhoto, getSettings, nextPhotoSeq } from "../store";
+import { activeLines, addPhoto, getSettings, nextPhotoSeq } from "../store";
 import { colors } from "../theme";
 
 export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
@@ -18,7 +18,12 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
   const [caption, setCaption] = useState("");
   const [phase, setPhase] = useState(st.lastPhase);
   const [area, setArea] = useState(st.lastArea);
+  const [lineId, setLineId] = useState(null);
   const [err, setErr] = useState(null);
+
+  // Today's saved entries — a photo can document a specific line (schema §4.5
+  // line_id) so the material's SKU/qty/cost and its picture travel together.
+  const lines = activeLines(workDate);
 
   async function grab(fromCamera) {
     setErr(null);
@@ -57,6 +62,7 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
       caption: caption.trim() || null,
       phase,
       area,
+      line_id: lineId,
       captured_at: new Date().toISOString(),
     });
     onDone();
@@ -95,6 +101,26 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
             />
             <Label>{t("area")}</Label>
             <PickRow options={PROJECT.areas} value={area} onChange={setArea} />
+            {lines.length > 0 && (
+              <>
+                <Label>{t("linkLine")}</Label>
+                <PickRow
+                  options={[
+                    { code: null },
+                    ...lines.map((l) => ({
+                      code: l.line_id,
+                      short:
+                        l.kind === "labor"
+                          ? `${l.worker} ${l.hours}h`
+                          : (l.description ?? "").slice(0, 26),
+                    })),
+                  ]}
+                  value={lineId}
+                  onChange={setLineId}
+                  renderLabel={(o) => (o.code == null ? t("none") : o.short)}
+                />
+              </>
+            )}
             <Muted style={{ marginTop: 8 }}>
               {photoFilename(workDate, nextPhotoSeq(workDate))}
             </Muted>
