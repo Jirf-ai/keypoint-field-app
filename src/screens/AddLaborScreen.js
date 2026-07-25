@@ -70,18 +70,6 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
       <Card>
         <FloatingLabelInput label={t("worker")} value={worker} onChangeText={setWorker} />
 
-        {/* Quick hours — one tap covers most days; the field takes odd amounts. */}
-        <View style={[s.row, { marginTop: 12, alignItems: "center" }]}>
-          {["4", "6", "8", "10"].map((h) => (
-            <BigButton
-              key={h}
-              label={`${h}h`}
-              onPress={() => setHours(h)}
-              tone={hours === h ? "brand" : "plain"}
-              style={s.quickHour}
-            />
-          ))}
-        </View>
         <View style={[s.row, { marginTop: 10 }]}>
           <View style={{ flex: 1 }}>
             <FloatingLabelInput
@@ -181,7 +169,6 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
 const s = StyleSheet.create({
   row: { flexDirection: "row", gap: 10 },
   gapTop: { marginTop: 10 },
-  quickHour: { flex: 1, minHeight: 48, paddingVertical: 10, paddingHorizontal: 0 },
   total: {
     color: colors.text,
     fontWeight: "800",
