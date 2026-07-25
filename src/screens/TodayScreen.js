@@ -168,6 +168,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 12,
     gap: 10,
+    zIndex: 100, // the project dropdown overlays the buttons below
   },
   projName: { color: colors.text, fontSize: 16, fontWeight: "800" },
   dateLine: { color: colors.brand, fontSize: 13.5, fontWeight: "700", marginTop: 2 },

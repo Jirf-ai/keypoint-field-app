@@ -3,7 +3,7 @@
 // tighter match). A brand-new worker sees "Find your project" and searches;
 // recents make every later switch two taps and work offline.
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { searchProjects } from "../api";
 import FloatingLabelInput from "./FloatingLabelInput";
 import { Card, Label, Muted } from "./ui";
@@ -43,7 +43,10 @@ export default function ProjectPicker({ t, current, recents, onSelect }) {
     onSelect(p);
   }
 
-  const otherRecents = recents.filter((r) => r.id !== current?.id);
+  // The recents array — current project first (marked live), then the rest.
+  const recentList = current
+    ? [current, ...recents.filter((r) => r.id !== current.id)]
+    : recents;
 
   // No project yet = the ONE thing to do. Render a full-width brand CTA with a
   // slow breathing pulse until it's tapped; once a project exists, collapse to
@@ -62,7 +65,7 @@ export default function ProjectPicker({ t, current, recents, onSelect }) {
   }, [current, open]);
 
   return (
-    <View>
+    <View style={s.wrap}>
       {!current && !open ? (
         <Animated.View
           style={{
@@ -99,31 +102,39 @@ export default function ProjectPicker({ t, current, recents, onSelect }) {
 
       {open && (
         <Card style={s.drop}>
-          <FloatingLabelInput
-            label={t("typeAddress")}
-            value={q}
-            onChangeText={setQ}
-            autoCapitalize="none"
-          />
-          {searching && <ActivityIndicator style={{ marginTop: 10 }} color={colors.brand} />}
-          {results.map((p) => (
-            <Pressable key={p.id} style={s.row} onPress={() => pick(p)} accessibilityRole="button">
-              <Text style={s.rowName} numberOfLines={1}>{p.name}</Text>
-              {p.status ? <Text style={s.rowStatus}>{p.status}</Text> : null}
-            </Pressable>
-          ))}
-          {noHit && <Muted style={{ marginTop: 10 }}>{t("noProjectFound")}</Muted>}
+          <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 380 }}>
+            <FloatingLabelInput
+              label={t("typeAddress")}
+              value={q}
+              onChangeText={setQ}
+              autoCapitalize="none"
+            />
+            {searching && <ActivityIndicator style={{ marginTop: 10 }} color={colors.brand} />}
+            {results.map((p) => (
+              <Pressable key={p.id} style={s.row} onPress={() => pick(p)} accessibilityRole="button">
+                <Text style={s.rowName} numberOfLines={1}>{p.name}</Text>
+                {p.status ? <Text style={s.rowStatus}>{p.status}</Text> : null}
+              </Pressable>
+            ))}
+            {noHit && <Muted style={{ marginTop: 10 }}>{t("noProjectFound")}</Muted>}
 
-          {otherRecents.length > 0 && (
-            <>
-              <Label>{t("recentProjects")}</Label>
-              {otherRecents.map((p) => (
-                <Pressable key={p.id} style={s.row} onPress={() => pick(p)} accessibilityRole="button">
-                  <Text style={s.rowName} numberOfLines={1}>{p.name}</Text>
-                </Pressable>
-              ))}
-            </>
-          )}
+            {recentList.length > 0 && (
+              <>
+                <Label>{t("recentProjects")}</Label>
+                {recentList.map((p) => {
+                  const isCurrent = p.id === current?.id;
+                  return (
+                    <Pressable key={p.id} style={s.row} onPress={() => pick(p)} accessibilityRole="button">
+                      <Text style={[s.rowName, isCurrent && s.rowCurrent]} numberOfLines={1}>
+                        {p.name}
+                      </Text>
+                      {isCurrent && <View style={s.liveDot} />}
+                    </Pressable>
+                  );
+                })}
+              </>
+            )}
+          </ScrollView>
         </Card>
       )}
     </View>
@@ -168,7 +179,23 @@ const s = StyleSheet.create({
   },
   namePlaceholder: { color: colors.brand },
   chev: { color: colors.brand, fontSize: 14, fontWeight: "800" },
-  drop: { marginHorizontal: 0, marginTop: 10, marginBottom: 4 },
+  // Overlay panel: floats OVER the page content (nothing shifts down).
+  wrap: { zIndex: 100 },
+  drop: {
+    position: "absolute",
+    top: 34,
+    left: 0,
+    right: 0,
+    marginHorizontal: 0,
+    marginBottom: 0,
+    zIndex: 100,
+    elevation: 12,
+    shadowColor: "#0B1220",
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+  },
+  rowCurrent: { fontWeight: "800" },
   row: {
     paddingVertical: 13,
     borderTopWidth: StyleSheet.hairlineWidth,
