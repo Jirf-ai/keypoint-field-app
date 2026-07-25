@@ -72,6 +72,7 @@ export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPho
             t={t}
             current={project}
             recents={recentProjects()}
+            role={activeProfile()?.role}
             onSelect={async (p) => {
               await setCurrentProject(p);
               onProjectChange?.();

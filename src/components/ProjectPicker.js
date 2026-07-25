@@ -9,7 +9,15 @@ import FloatingLabelInput from "./FloatingLabelInput";
 import { Card, Label, Muted } from "./ui";
 import { colors, radius } from "../theme";
 
-export default function ProjectPicker({ t, current, recents, onSelect }) {
+// Role-colored live dot: bright purple = the site manager is logged into this
+// project; green = crew. One glance tells anyone whose device is running.
+const DOT = {
+  site_manager: "#A855F7",
+  journeyman: "#15803d",
+};
+
+export default function ProjectPicker({ t, current, recents, onSelect, role }) {
+  const dotColor = DOT[role] ?? DOT.journeyman;
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
@@ -94,8 +102,13 @@ export default function ProjectPicker({ t, current, recents, onSelect }) {
           <Text style={[s.name, !current && s.namePlaceholder]} numberOfLines={1}>
             {current?.name ?? t("findProject")}
           </Text>
-          {/* Green dot = confirmed into this project, ready to record. */}
-          {current && <View style={s.liveDot} accessibilityLabel="Project active" />}
+          {/* Dot = confirmed into this project; color tells the role. */}
+          {current && (
+            <View
+              style={[s.liveDot, { backgroundColor: dotColor, shadowColor: dotColor }]}
+              accessibilityLabel={role === "site_manager" ? "Project active — site manager" : "Project active"}
+            />
+          )}
           <Text style={s.chev}>{open ? "▴" : "▾"}</Text>
         </Pressable>
       )}
