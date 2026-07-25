@@ -2,7 +2,7 @@
 // choice: "if recording rework gets someone in trouble, it will never be
 // recorded." A missing rework note warns AFTER saving, never blocks.
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 import { BigButton, Card, CollapsedPick, Label, Muted, PickRow } from "../components/ui";
 import { phaseLabel } from "../i18n";
@@ -22,10 +22,12 @@ const FIX_KEYS = {
 export default function AddLaborScreen({ t, lang, workDate, onDone }) {
   const st = getSettings();
   const me = activeProfile();
-  // Logging YOUR hours is the common case: name + usual trade prefilled from
-  // the profile — two taps (hours, save) for a normal day.
+  // The logged-in profile IS the worker — no name typing (Jeffrey 2026-07-24).
+  // Site managers can optionally flip to record for someone without the app.
   const [trade, setTrade] = useState(me?.default_trade ?? null);
   const [worker, setWorker] = useState(me?.display_name || st.recorded_by || "");
+  const [forOther, setForOther] = useState(false);
+  const isSM = me?.role === "site_manager";
   const [hours, setHours] = useState("");
   const [hourType, setHourType] = useState("regular");
   const [rate, setRate] = useState("");
@@ -68,7 +70,15 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
       <Card>
-        <FloatingLabelInput label={t("worker")} value={worker} onChangeText={setWorker} />
+        {forOther ? (
+          <FloatingLabelInput label={t("worker")} value={worker} onChangeText={setWorker} />
+        ) : (
+          isSM && (
+            <Pressable onPress={() => { setForOther(true); setWorker(""); }} accessibilityRole="button">
+              <Muted style={{ marginBottom: 4 }}>{t("forSomeoneElse")}</Muted>
+            </Pressable>
+          )
+        )}
 
         <View style={[s.row, { marginTop: 10 }]}>
           <View style={{ flex: 1 }}>
