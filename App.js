@@ -91,6 +91,16 @@ export default function App() {
   const workDate = todayStr();
   const t = makeT(lang);
 
+  // Midnight rollover: if the app sits open past 12:00am, notice the new day
+  // within a minute and re-render — Today becomes the new (empty) day and
+  // yesterday's log stays locked to its own date.
+  useEffect(() => {
+    const iv = setInterval(() => {
+      if (todayStr() !== workDate) setTick((x) => x + 1);
+    }, 60_000);
+    return () => clearInterval(iv);
+  }, [workDate]);
+
   // Worker identity: no profile, no capture — first run shows log-in/create.
   const [profile, setProfile] = useState(null);
 
