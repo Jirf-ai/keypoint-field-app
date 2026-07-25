@@ -7,6 +7,7 @@ import { BigButton, Card, Muted } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import {
   activeLines,
+  activeProfile,
   currentProject,
   dayStatus,
   photosFor,
@@ -55,9 +56,13 @@ export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPho
   const photos = photosFor(workDate);
   const totals = todayTotals(workDate);
   const status = dayStatus(workDate);
+  // Role decides the interface (PRD §3): the site manager runs the daily log
+  // (materials + pricing, review, submit); crew log their OWN hours + photos.
+  const isSM = activeProfile()?.role === "site_manager";
   // Photo-first reality: crews snap, they don't type. Unlinked photos are the
   // day's to-do — each tap opens the material form with the photo attached.
-  const inbox = photos.filter((p) => !p.line_id);
+  // Pricing them is the site manager's job, so only they see the inbox.
+  const inbox = isSM ? photos.filter((p) => !p.line_id) : [];
 
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
@@ -96,9 +101,15 @@ export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPho
       )}
 
       <View style={{ paddingHorizontal: 16, gap: 10, marginBottom: 14 }}>
-        <BigButton label={t("addMaterial")} onPress={() => nav("item")} disabled={!project} />
+        {isSM && <BigButton label={t("addMaterial")} onPress={() => nav("item")} disabled={!project} />}
         <BigButton label={t("addLabor")} onPress={() => nav("labor")} disabled={!project} />
-        <BigButton label={t("addPhoto")} onPress={() => nav("photo")} tone="plain" disabled={!project} />
+        <BigButton
+          label={t("addPhoto")}
+          onPress={() => nav("photo")}
+          tone={isSM ? "plain" : "brand"}
+          disabled={!project}
+        />
+        {!isSM && project && <Muted style={{ marginTop: 2 }}>{t("crewNote")}</Muted>}
       </View>
 
       {inbox.length > 0 && (
@@ -148,15 +159,18 @@ export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPho
         )}
       </Card>
 
-      <View style={{ paddingHorizontal: 16, gap: 10 }}>
-        <BigButton
-          label={t("review")}
-          onPress={() => nav("review")}
-          tone="green"
-          disabled={lines.length === 0}
-        />
-        <BigButton label={t("changeOrders")} onPress={() => nav("cos")} tone="plain" />
-      </View>
+      {/* Review/submit and change orders are the site manager's duties. */}
+      {isSM && (
+        <View style={{ paddingHorizontal: 16, gap: 10 }}>
+          <BigButton
+            label={t("review")}
+            onPress={() => nav("review")}
+            tone="green"
+            disabled={lines.length === 0}
+          />
+          <BigButton label={t("changeOrders")} onPress={() => nav("cos")} tone="plain" />
+        </View>
+      )}
     </ScrollView>
   );
 }

@@ -17,6 +17,7 @@ export default function AuthScreen({ t, lang, onDone }) {
   const [creating, setCreating] = useState(existing.length === 0);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [role, setRole] = useState(null);
   const [trade, setTrade] = useState(null);
   const [selfie, setSelfie] = useState(null);
   const [err, setErr] = useState(null);
@@ -83,12 +84,13 @@ export default function AuthScreen({ t, lang, onDone }) {
       lang,
       selfie_uri: await ensureDurable(selfie),
       phone: phone.trim() || null,
+      role,
     });
     onDone(p);
   }
 
   async function create() {
-    if (!name.trim() || !selfie) return;
+    if (!name.trim() || !selfie || !role) return;
     if (REQUIRE_PHONE_VERIFICATION) {
       if (!phone.trim()) return;
       // Public release: request OTP here (supabase.auth.signInWithOtp phone),
@@ -162,6 +164,25 @@ export default function AuthScreen({ t, lang, onDone }) {
               autoCapitalize="none"
             />
             <Muted style={{ marginTop: 6 }}>{t("phoneHint")}</Muted>
+
+            {/* Role decides the interface (PRD §3): site managers run the
+                daily log; crew log their own hours + photos. */}
+            <Label>{t("roleQuestion")}</Label>
+            <PickRow
+              options={[
+                { code: "site_manager", label: t("roleSM") },
+                { code: "journeyman", label: t("roleCrew") },
+              ]}
+              value={role}
+              onChange={setRole}
+              renderLabel={(o) => o.label}
+            />
+            {role && (
+              <Muted style={{ marginTop: 6 }}>
+                {role === "site_manager" ? t("roleSMHint") : t("roleCrewHint")}
+              </Muted>
+            )}
+
             <Label>{t("yourTrade")}</Label>
             <PickRow options={TRADES} value={trade} onChange={setTrade} renderLabel={(o) => o[lang] ?? o.en} />
           </Card>
@@ -207,7 +228,8 @@ export default function AuthScreen({ t, lang, onDone }) {
                 label={REQUIRE_PHONE_VERIFICATION ? t("sendCode") : t("start")}
                 onPress={create}
                 disabled={
-                  !name.trim() || !selfie || (REQUIRE_PHONE_VERIFICATION && !phone.trim())
+                  !name.trim() || !selfie || !role ||
+                  (REQUIRE_PHONE_VERIFICATION && !phone.trim())
                 }
               />
               {existing.length > 0 && (

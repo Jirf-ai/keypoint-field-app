@@ -96,7 +96,7 @@ export async function saveSettings(patch) {
 }
 
 // ------------------------------------------------------------------ profiles
-export async function createProfile({ display_name, default_trade, lang, selfie_uri, phone }) {
+export async function createProfile({ display_name, default_trade, lang, selfie_uri, phone, role }) {
   const p = {
     worker_id: uuid(),
     display_name,
@@ -105,7 +105,9 @@ export async function createProfile({ display_name, default_trade, lang, selfie_
     selfie_uri: selfie_uri ?? null,
     phone: phone ?? null,          // verified via OTP at public release
     phone_verified: false,
-    role: "journeyman",
+    // schema §4.8 role — drives which interface the worker gets (site
+    // managers run the daily log; crew log their own hours + photos).
+    role: role ?? "journeyman",
     active: true,
     created_at: new Date().toISOString(),
   };
