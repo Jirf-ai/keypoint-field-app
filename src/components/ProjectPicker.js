@@ -91,6 +91,8 @@ export default function ProjectPicker({ t, current, recents, onSelect }) {
           <Text style={[s.name, !current && s.namePlaceholder]} numberOfLines={1}>
             {current?.name ?? t("findProject")}
           </Text>
+          {/* Green dot = confirmed into this project, ready to record. */}
+          {current && <View style={s.liveDot} accessibilityLabel="Project active" />}
           <Text style={s.chev}>{open ? "▴" : "▾"}</Text>
         </Pressable>
       )}
@@ -154,6 +156,16 @@ const s = StyleSheet.create({
     paddingVertical: 2,
   },
   name: { color: colors.text, fontSize: 16, fontWeight: "800", flexShrink: 1 },
+  liveDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: colors.green,
+    shadowColor: colors.green,
+    shadowOpacity: 0.6,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 0 },
+  },
   namePlaceholder: { color: colors.brand },
   chev: { color: colors.brand, fontSize: 14, fontWeight: "800" },
   drop: { marginHorizontal: 0, marginTop: 10, marginBottom: 4 },
