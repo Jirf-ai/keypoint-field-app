@@ -121,6 +121,9 @@ export default function ProjectPicker({ t, current, recents, onSelect }) {
             {recentList.length > 0 && (
               <>
                 <Label>{t("recentProjects")}</Label>
+                {/* No dots in the list — the green dot belongs ONLY to the
+                    activated project in the title row. Rows here are options;
+                    the current one just reads bold. */}
                 {recentList.map((p) => {
                   const isCurrent = p.id === current?.id;
                   return (
@@ -128,7 +131,6 @@ export default function ProjectPicker({ t, current, recents, onSelect }) {
                       <Text style={[s.rowName, isCurrent && s.rowCurrent]} numberOfLines={1}>
                         {p.name}
                       </Text>
-                      {isCurrent && <View style={s.liveDot} />}
                     </Pressable>
                   );
                 })}
