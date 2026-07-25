@@ -100,15 +100,11 @@ export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPho
         </View>
       )}
 
+      {/* Photo-first order, one color: snap → hours → materials (SM only). */}
       <View style={{ paddingHorizontal: 16, gap: 10, marginBottom: 14 }}>
-        {isSM && <BigButton label={t("addMaterial")} onPress={() => nav("item")} disabled={!project} />}
+        <BigButton label={t("addPhoto")} onPress={() => nav("photo")} disabled={!project} />
         <BigButton label={t("addLabor")} onPress={() => nav("labor")} disabled={!project} />
-        <BigButton
-          label={t("addPhoto")}
-          onPress={() => nav("photo")}
-          tone={isSM ? "plain" : "brand"}
-          disabled={!project}
-        />
+        {isSM && <BigButton label={t("addMaterial")} onPress={() => nav("item")} disabled={!project} />}
       </View>
 
       {/* Crew guide — the two duties, in their language, always visible. */}
