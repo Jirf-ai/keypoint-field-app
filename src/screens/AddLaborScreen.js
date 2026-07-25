@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import FloatingLabelInput from "../components/FloatingLabelInput";
-import { BigButton, Card, Label, Muted, PickRow } from "../components/ui";
+import { BigButton, Card, CollapsedPick, Label, Muted, PickRow } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { HOUR_TYPES, PHASES, TRADES, areasFor, validateLabor, laborWarnings } from "../schema";
 import { activeLines, activeProfile, addLine, currentProject, getSettings } from "../store";
@@ -68,16 +68,20 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
       <Card>
-        <Label>{t("trade")}</Label>
-        <PickRow
-          options={TRADES}
-          value={trade}
-          onChange={setTrade}
-          renderLabel={(o) => o[lang] ?? o.en}
-        />
+        <FloatingLabelInput label={t("worker")} value={worker} onChangeText={setWorker} />
 
-        <FloatingLabelInput label={t("worker")} value={worker} onChangeText={setWorker} style={s.gapTop} />
-
+        {/* Quick hours — one tap covers most days; the field takes odd amounts. */}
+        <View style={[s.row, { marginTop: 12, alignItems: "center" }]}>
+          {["4", "6", "8", "10"].map((h) => (
+            <BigButton
+              key={h}
+              label={`${h}h`}
+              onPress={() => setHours(h)}
+              tone={hours === h ? "brand" : "plain"}
+              style={s.quickHour}
+            />
+          ))}
+        </View>
         <View style={[s.row, { marginTop: 10 }]}>
           <View style={{ flex: 1 }}>
             <FloatingLabelInput
@@ -113,16 +117,33 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
         />
         {hourType === "rework" && <Muted style={s.gapTop}>{t("reworkBlameFree")}</Muted>}
 
-        <Label>{t("phase")}</Label>
-        <PickRow
-          options={PHASES}
-          value={phase}
-          onChange={setPhase}
-          renderLabel={(p) => phaseLabel(p, lang)}
-        />
-
-        <Label>{t("area")}</Label>
-        <PickRow options={areasFor(currentProject()?.name)} value={area} onChange={setArea} />
+        {/* Pre-filled from profile / last use — collapsed one-liners; expand
+            only to change (schema still gets all required fields). */}
+        <View style={{ marginTop: 12 }}>
+          <CollapsedPick
+            label={t("trade")}
+            value={trade}
+            displayValue={trade ? (TRADES.find((x) => x.code === trade)?.[lang] ?? trade) : null}
+            options={TRADES}
+            onChange={setTrade}
+            renderLabel={(o) => o[lang] ?? o.en}
+          />
+          <CollapsedPick
+            label={t("phase")}
+            value={phase}
+            displayValue={phase ? phaseLabel(phase, lang) : null}
+            options={PHASES}
+            onChange={setPhase}
+            renderLabel={(p) => phaseLabel(p, lang)}
+          />
+          <CollapsedPick
+            label={t("area")}
+            value={area}
+            displayValue={area}
+            options={areasFor(currentProject()?.name)}
+            onChange={setArea}
+          />
+        </View>
 
         <FloatingLabelInput
           label={t("note")}
@@ -160,6 +181,7 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
 const s = StyleSheet.create({
   row: { flexDirection: "row", gap: 10 },
   gapTop: { marginTop: 10 },
+  quickHour: { flex: 1, minHeight: 48, paddingVertical: 10, paddingHorizontal: 0 },
   total: {
     color: colors.text,
     fontWeight: "800",

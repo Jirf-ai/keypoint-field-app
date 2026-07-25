@@ -1,4 +1,5 @@
 // Field primitives — big, obvious, glove-friendly. One-handed outdoors use.
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, radius, shadow, touch } from "../theme";
 
@@ -77,7 +78,62 @@ export function PickRow({ options, value, onChange, renderLabel, colorFor }) {
   );
 }
 
+// Collapsed picker — brutal simplicity (PRD §13.1): shows LABEL + chosen value
+// on one tappable line; the chip wall only appears when the worker actually
+// needs to change it. Pre-filled values mean a normal day never expands these.
+export function CollapsedPick({ label, value, displayValue, options, onChange, renderLabel, colorFor }) {
+  const [open, setOpen] = useState(value == null);
+  return (
+    <View style={s.cpWrap}>
+      <Pressable
+        style={s.cpHead}
+        onPress={() => setOpen(!open)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={`${label}: ${displayValue ?? "—"}`}
+      >
+        <Text style={s.cpLabel}>{label}</Text>
+        <Text style={[s.cpValue, value == null && s.cpValueEmpty]} numberOfLines={1}>
+          {displayValue ?? "—"}
+        </Text>
+        <Text style={s.cpChev}>{open ? "▴" : "▾"}</Text>
+      </Pressable>
+      {open && (
+        <View style={{ marginTop: 8 }}>
+          <PickRow
+            options={options}
+            value={value}
+            onChange={(v) => {
+              onChange(v);
+              setOpen(false);
+            }}
+            renderLabel={renderLabel}
+            colorFor={colorFor}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
+  cpWrap: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingVertical: 10,
+  },
+  cpHead: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 34 },
+  cpLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    flexShrink: 0,
+  },
+  cpValue: { color: colors.text, fontSize: 15, fontWeight: "700", flex: 1, textAlign: "right" },
+  cpValueEmpty: { color: colors.brand },
+  cpChev: { color: colors.brand, fontSize: 13, fontWeight: "800" },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.card,
