@@ -109,8 +109,17 @@ export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPho
           tone={isSM ? "plain" : "brand"}
           disabled={!project}
         />
-        {!isSM && project && <Muted style={{ marginTop: 2 }}>{t("crewNote")}</Muted>}
       </View>
+
+      {/* Crew guide — the two duties, in their language, always visible. */}
+      {!isSM && project && (
+        <Card>
+          <Text style={s.guideTitle}>{t("crewGuideTitle")}</Text>
+          <Text style={s.guideItem}>1.  {t("crewGuide1")}</Text>
+          <Text style={s.guideItem}>2.  {t("crewGuide2")}</Text>
+          <Muted style={{ marginTop: 8 }}>{t("crewNote")}</Muted>
+        </Card>
+      )}
 
       {inbox.length > 0 && (
         <Card>
@@ -215,6 +224,15 @@ const s = StyleSheet.create({
   lineTitle: { color: colors.text, fontSize: 14.5, fontWeight: "600" },
   lineMeta: { color: colors.textMuted, fontSize: 12.5, marginTop: 1 },
   lineAmt: { color: colors.text, fontSize: 14.5, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  guideTitle: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
+  guideItem: { color: colors.text, fontSize: 15, fontWeight: "600", lineHeight: 24 },
   inboxTitle: { color: colors.text, fontWeight: "800", fontSize: 15, marginBottom: 10 },
   inboxRow: { flexDirection: "row", gap: 8 },
   inboxThumb: {
