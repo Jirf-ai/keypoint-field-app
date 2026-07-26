@@ -74,7 +74,7 @@ Motivation includes the Record app: clients must be able to pull up past
 projects' data and material lists, which only works if field capture files
 into the same project-keyed store the Records engine reads.
 
-Implementation: `BOBAI/engines/operations/FIELD_CAPTURE_MIGRATION.sql` —
+Implementation: `BOBAI/agents/operations/FIELD_CAPTURE_MIGRATION.sql` —
 field_daily_logs / field_line_items / field_labor_entries / field_photos /
 field_change_orders (append-only, client-generated UUIDs for idempotent sync,
 RLS with no anon access), the D-J1 `project_items` pool seeded from bills, and
