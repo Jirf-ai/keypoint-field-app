@@ -75,11 +75,13 @@ projects' data and material lists, which only works if field capture files
 into the same project-keyed store the Records engine reads.
 
 Implementation: `BOBAI/engines/operations/FIELD_CAPTURE_MIGRATION.sql` —
-field_logs / field_line_items / field_labor_entries / field_photos /
+field_daily_logs / field_line_items / field_labor_entries / field_photos /
 field_change_orders (append-only, client-generated UUIDs for idempotent sync,
 RLS with no anon access), the D-J1 `project_items` pool seeded from bills, and
-the schema §10 ingest views for the Cost engine. Written, pending apply via
-Supabase MCP.
+the schema §10 ingest views for the Cost engine. APPLIED 2026-07-26 via the
+Management API. NOTE: the daily-log table is `field_daily_logs`, not the PRD's
+`field_logs` — that name was already taken on the spine by the legacy video-log
+table (parse-field-video et al.). Sync layer must write to `field_daily_logs`.
 
 ---
 
