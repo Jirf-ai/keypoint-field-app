@@ -3,6 +3,7 @@
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { BigButton, Card, Label, Muted } from "../components/ui";
 import { activeLines, dayStatus, photosFor, submitDay, todayTotals } from "../store";
+import { syncNow } from "../sync";
 import { CLASS_COLORS, colors } from "../theme";
 
 function usd(n) {
@@ -20,6 +21,7 @@ export default function ReviewScreen({ t, workDate, onDone }) {
 
   async function submit() {
     await submitDay(workDate);
+    syncNow(); // push the day + its rows right away; fails silently offline
     onDone();
   }
 

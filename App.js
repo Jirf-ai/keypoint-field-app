@@ -9,6 +9,7 @@ import LaunchSplash, { LogoRow } from "./src/components/LaunchSplash";
 import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
 import { activeProfile, getSettings, load, logOut, pendingCount, saveSettings } from "./src/store";
+import { syncNow } from "./src/sync";
 import AuthScreen from "./src/screens/AuthScreen";
 import AddItemScreen from "./src/screens/AddItemScreen";
 import AddLaborScreen from "./src/screens/AddLaborScreen";
@@ -113,6 +114,14 @@ export default function App() {
     SplashScreen.hideAsync().catch(() => {}); // overlay takes over from here
   }, []);
 
+  // Background sync: every landing on Today (app open, back from a capture
+  // screen) pushes whatever's pending. syncNow() is single-flight and a no-op
+  // when the queue is empty; offline it fails silently and retries next time.
+  useEffect(() => {
+    if (!ready || !profile || screen !== "today") return;
+    syncNow().then(() => setTick((x) => x + 1));
+  }, [ready, profile, screen]);
+
   useEffect(() => {
     if (dock || splashDone) return;
     const iv = setInterval(() => {
@@ -206,6 +215,7 @@ export default function App() {
             lang={lang}
             workDate={workDate}
             pending={pending}
+            onSync={() => syncNow().then(() => setTick((x) => x + 1))}
             nav={nav}
             onFillPhoto={(p) => {
               setFromPhoto(p);

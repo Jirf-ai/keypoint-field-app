@@ -50,7 +50,7 @@ function LineRow({ l, lang, photoCount }) {
   );
 }
 
-export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPhoto, onProjectChange }) {
+export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, onFillPhoto, onProjectChange }) {
   const project = currentProject();
   const lines = activeLines(workDate);
   const photos = photosFor(workDate);
@@ -89,9 +89,9 @@ export default function TodayScreen({ t, lang, workDate, pending, nav, onFillPho
           </Text>
         </View>
         {pending > 0 && (
-          <View style={s.pendingBadge}>
+          <Pressable style={s.pendingBadge} onPress={onSync} accessibilityRole="button" accessibilityLabel={t("pending")}>
             <Text style={s.pendingText}>{pending} {t("pending")}</Text>
-          </View>
+          </Pressable>
         )}
       </View>
 

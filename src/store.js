@@ -62,10 +62,13 @@ function stamp(entry) {
     project_name: state.current_project?.name ?? null,
     recorded_at: new Date().toISOString(),
     recorded_by: state.settings.recorded_by || "unknown",
-    captured_offline: true, // v0 is always offline-first; sync layer comes later
+    captured_offline: true, // v0 is always offline-first; sync reconciles after
     synced_at: null,
-    version: 1,
-    supersedes: null,
+    // Honor amendment chains: amendLine passes version/supersedes explicitly.
+    // Hard-resetting them here silently flattened every correction to a fresh
+    // v1 row — both versions would count as active server-side.
+    version: entry.version ?? 1,
+    supersedes: entry.supersedes ?? null,
   };
 }
 
@@ -176,11 +179,14 @@ export async function addPhoto(photo) {
 }
 
 // Attach an already-captured photo to a line created later (photo-first flow:
-// crews snap now, the site manager fills in details at end of day).
+// crews snap now, the site manager fills in details at end of day). Clearing
+// synced_at re-queues an already-synced photo so the link reaches the server
+// (merge upsert on photo_id updates line_id in place).
 export async function linkPhoto(photo_id, line_id) {
   const p = state.photos.find((x) => x.photo_id === photo_id);
   if (p) {
     p.line_id = line_id;
+    p.synced_at = null;
     await persist();
   }
   return p;
@@ -233,6 +239,50 @@ export function pendingCount() {
     state.photos.filter((p) => !p.synced_at).length +
     state.change_orders.filter((c) => !c.synced_at).length
   );
+}
+
+// ------------------------------------------------------------------- syncing
+// Unsynced rows grouped the way sync-field-log wants them: one call per
+// project, lines split into items vs labor. Photos go separately (binary
+// payloads travel in small chunks — see sync.js).
+export function pendingByProject() {
+  const groups = {};
+  const g = (pid) =>
+    (groups[pid] ??= { days: [], items: [], labor: [], change_orders: [] });
+  for (const l of state.lines.filter((x) => !x.synced_at && x.project_id)) {
+    g(l.project_id)[l.kind === "labor" ? "labor" : "items"].push(l);
+  }
+  for (const c of state.change_orders.filter((x) => !x.synced_at && x.project_id)) {
+    g(c.project_id).change_orders.push(c);
+  }
+  // Day statuses ride along for any project already being synced (idempotent
+  // upsert server-side, so re-sending submit status every time is harmless).
+  for (const [key, day] of Object.entries(state.days)) {
+    const i = key.indexOf(":");
+    const pid = key.slice(0, i);
+    if (groups[pid]) groups[pid].days.push({ work_date: key.slice(i + 1), ...day });
+  }
+  return groups;
+}
+
+export function pendingPhotosByProject() {
+  const groups = {};
+  for (const p of state.photos.filter((x) => !x.synced_at && x.project_id)) {
+    (groups[p.project_id] ??= []).push(p);
+  }
+  return groups;
+}
+
+// Stamp synced_at on the ids the server echoed back; anything it didn't echo
+// stays pending and rides the next sync.
+export async function markSynced(echo, ts) {
+  const items = new Set([...(echo?.items ?? []), ...(echo?.labor ?? [])]);
+  const photos = new Set(echo?.photos ?? []);
+  const cos = new Set(echo?.change_orders ?? []);
+  for (const l of state.lines) if (items.has(l.line_id)) l.synced_at = ts;
+  for (const p of state.photos) if (photos.has(p.photo_id)) p.synced_at = ts;
+  for (const c of state.change_orders) if (cos.has(c.co_id)) c.synced_at = ts;
+  await persist();
 }
 
 export function todayTotals(work_date = todayStr()) {
