@@ -292,7 +292,7 @@ const s = StyleSheet.create({
     overflow: "hidden",
   },
   langBtn: { paddingVertical: 4, paddingHorizontal: 9 },
-  langOn: { backgroundColor: colors.brand },
+  langOn: { backgroundColor: colors.ink },
   langText: { color: colors.textSecondary, fontSize: 11.5, fontWeight: "800" },
   langTextOn: { color: "#fff" },
   back: { color: colors.text, fontSize: 30, fontWeight: "700", lineHeight: 30 },

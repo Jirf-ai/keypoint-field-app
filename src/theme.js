@@ -1,22 +1,28 @@
-// Kaicon Field — same cream/ink/orange kit as the DD app (one company, one kit).
-// Field twist: bigger touch targets everywhere — the user wears gloves.
+// Kaicon Field — graphite + high-vis kit (re-skinned 2026-07-26, Jeffrey:
+// "modern like Uber/Lemonade, built for construction, zero clarity loss").
+// Primary actions are near-black; ONE vivid safety-orange accent carries the
+// brand (badge, date, live dot, hero CTA) instead of orange slabs everywhere.
+// Field twist stays: bigger touch targets everywhere — the user wears gloves.
 
 export const colors = {
-  bg: "#FAF6EF",
+  bg: "#F4F5F7",           // cool porcelain (the cream read as early-2000s)
   card: "#FFFFFF",
-  border: "#E8E1D6",
-  borderStrong: "#D9CFBE",
-  text: "#16130F",
-  textSecondary: "#6E675E",
-  textMuted: "#9C9488",
+  border: "#E8EAED",
+  borderStrong: "#D6D9DE",
+  text: "#0E1116",
+  textSecondary: "#5C6470",
+  textMuted: "#8A929E",
 
-  brand: "#D9531F",
-  brandDark: "#B8431A",
-  brandTint: "#FBEEE6",
+  ink: "#15181E",          // primary action surface — dark, unmistakable
+  inkPressed: "#2A2F38",
 
-  green: "#15803d",
-  amber: "#a16207",
-  red: "#b91c1c",
+  brand: "#FF5A1F",        // high-vis construction orange — accent, not wallpaper
+  brandDark: "#E64A12",
+  brandTint: "#FFF1EA",
+
+  green: "#0E9F6E",
+  amber: "#B45309",
+  red: "#DC2626",
 };
 
 // cost_class chip colors — distinct, high-contrast, label always shown.
@@ -28,16 +34,16 @@ export const CLASS_COLORS = {
   S: { color: "#be185d", bg: "#FDF0F6" },
 };
 
-export const radius = { card: 16, input: 12, pill: 999 };
+export const radius = { card: 20, input: 14, pill: 999 };
 
 export const touch = { min: 56 }; // minimum tap-target height (gloves)
 
 export const shadow = {
   card: {
     shadowColor: "#0B1220",
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
     elevation: 2,
   },
 };

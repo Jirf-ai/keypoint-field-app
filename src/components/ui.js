@@ -16,9 +16,13 @@ export function Label({ children }) {
 }
 
 // The primary action: full-width, 60px tall, impossible to miss.
-export function BigButton({ label, onPress, tone = "brand", disabled, style }) {
+// Default tone is INK (graphite) — the modern primary. "brand" is reserved
+// for ONE hero action per screen; "green" = submit; "plain" = quiet.
+export function BigButton({ label, onPress, tone = "ink", disabled, style }) {
   const bg =
-    tone === "brand" ? colors.brand : tone === "green" ? colors.green : colors.card;
+    tone === "brand" ? colors.brand :
+    tone === "green" ? colors.green :
+    tone === "plain" ? colors.card : colors.ink;
   const fg = tone === "plain" ? colors.text : "#fff";
   return (
     <Pressable
@@ -162,20 +166,20 @@ const s = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
   },
-  bigPlain: { borderWidth: 1.5, borderColor: colors.borderStrong },
-  bigText: { fontSize: 17, fontWeight: "800", letterSpacing: 0.2 },
+  bigPlain: { borderWidth: 1, borderColor: colors.borderStrong },
+  bigText: { fontSize: 16.5, fontWeight: "700", letterSpacing: 0.1 },
   pickWrap: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
   pick: {
     minHeight: 46,
     paddingVertical: 11,
     paddingHorizontal: 16,
     borderRadius: radius.pill,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.borderStrong,
     backgroundColor: colors.card,
     justifyContent: "center",
   },
-  pickOn: { backgroundColor: colors.brand, borderColor: colors.brand },
-  pickText: { color: colors.textSecondary, fontSize: 15, fontWeight: "700" },
-  pickTextOn: { color: "#fff" },
+  pickOn: { backgroundColor: colors.ink, borderColor: colors.ink },
+  pickText: { color: colors.text, fontSize: 15, fontWeight: "600" },
+  pickTextOn: { color: "#fff", fontWeight: "700" },
 });

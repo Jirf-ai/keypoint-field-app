@@ -103,7 +103,8 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
 
       {/* Photo-first order, one color: snap → hours → materials (SM only). */}
       <View style={{ paddingHorizontal: 16, gap: 10, marginBottom: 14 }}>
-        <BigButton label={t("addPhoto")} onPress={() => nav("photo")} disabled={!project} />
+        {/* Photo is the hero (photo-first doctrine) — the one brand-orange CTA. */}
+        <BigButton label={t("addPhoto")} onPress={() => nav("photo")} tone="brand" disabled={!project} />
         <BigButton label={t("addLabor")} onPress={() => nav("labor")} disabled={!project} />
         {isSM && <BigButton label={t("addMaterial")} onPress={() => nav("item")} disabled={!project} />}
       </View>
