@@ -47,16 +47,18 @@ function ProfileAvatar({ profile }) {
 function LangToggle({ lang, onLang }) {
   return (
     <View style={s.langWrap}>
-      {["en", "es"].map((c) => (
+      {["en", "es", "zh"].map((c) => (
         <Pressable
           key={c}
           onPress={() => onLang(c)}
           style={[s.langBtn, lang === c && s.langOn]}
           accessibilityRole="button"
           accessibilityState={{ selected: lang === c }}
-          accessibilityLabel={c === "en" ? "English" : "Español"}
+          accessibilityLabel={c === "en" ? "English" : c === "es" ? "Español" : "中文"}
         >
-          <Text style={[s.langText, lang === c && s.langTextOn]}>{c.toUpperCase()}</Text>
+          <Text style={[s.langText, lang === c && s.langTextOn]}>
+            {c === "zh" ? "中文" : c.toUpperCase()}
+          </Text>
         </Pressable>
       ))}
     </View>

@@ -82,7 +82,7 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
           <Text style={s.dateLine}>
             {t("today")} ·{" "}
             {new Date(workDate + "T12:00:00").toLocaleDateString(
-              lang === "es" ? "es-MX" : "en-US",
+              lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US",
               { weekday: "short", month: "short", day: "numeric", year: "numeric" }
             )}
             {status !== "draft" ? `  ·  ${t(status === "amended" ? "amended" : "submitted")}` : ""}
