@@ -4,21 +4,23 @@
 // brand (badge, date, live dot, hero CTA) instead of orange slabs everywhere.
 // Field twist stays: bigger touch targets everywhere — the user wears gloves.
 
+// BLUEPRINT BLUE (Jeffrey 2026-07-26, "try this for now"): single deep-cobalt
+// system on light slate — Stripe/Linear family, and blueprints ARE construction.
 export const colors = {
-  bg: "#F4F5F7",           // cool porcelain (the cream read as early-2000s)
+  bg: "#F6F7FB",           // light slate
   card: "#FFFFFF",
-  border: "#E8EAED",
-  borderStrong: "#D6D9DE",
-  text: "#0E1116",
-  textSecondary: "#5C6470",
-  textMuted: "#8A929E",
+  border: "#E7E9F0",
+  borderStrong: "#D8DCE6",
+  text: "#0F1222",
+  textSecondary: "#5A6172",
+  textMuted: "#8B92A3",
 
-  ink: "#15181E",          // primary action surface — dark, unmistakable
-  inkPressed: "#2A2F38",
+  ink: "#2947F5",          // primary action surface — deep cobalt
+  inkPressed: "#1F38CC",
 
-  brand: "#FF5A1F",        // high-vis construction orange — accent, not wallpaper
-  brandDark: "#E64A12",
-  brandTint: "#FFF1EA",
+  brand: "#2947F5",        // one color, used confidently (accent = primary)
+  brandDark: "#1F38CC",
+  brandTint: "#EDF0FF",
 
   green: "#0E9F6E",
   amber: "#B45309",

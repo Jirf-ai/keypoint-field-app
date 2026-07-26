@@ -14,7 +14,7 @@
     "android": {
       "package": "ai.jirf.kaiconfield",
       "adaptiveIcon": {
-        "backgroundColor": "#F4F5F7",
+        "backgroundColor": "#F6F7FB",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -42,7 +42,7 @@
         {
           "image": "./assets/splash-icon.png",
           "imageWidth": 140,
-          "backgroundColor": "#F4F5F7"
+          "backgroundColor": "#F6F7FB"
         }
       ]
     ]

@@ -5,6 +5,7 @@
 // one via `supersedes`; nothing is destroyed. Client-generated ids make future
 // sync idempotent.
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import { todayStr } from "./schema";
 
 const KEY = "kaicon-field:v1";
@@ -47,6 +48,20 @@ export async function load() {
 }
 
 async function persist() {
+  // WEB ONLY: AsyncStorage backs onto localStorage, which writes SYNCHRONOUSLY
+  // on the main thread — serializing a store that holds base64 selfies/photos
+  // freezes the page mid-tap ("cursor stuck"). Batch web writes on a short
+  // trailing timer; the browser preview is not the capture instrument. Native
+  // keeps the immediate write (async, off-thread) — zero-loss rule intact.
+  if (Platform.OS === "web") {
+    clearTimeout(persist._t);
+    persist._t = setTimeout(doPersist, 250);
+    return;
+  }
+  await doPersist();
+}
+
+async function doPersist() {
   try {
     await AsyncStorage.setItem(KEY, JSON.stringify(state));
   } catch {
