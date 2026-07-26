@@ -146,6 +146,10 @@ export async function addLine(entry) {
   state.lines.push(line);
   state.settings.lastPhase = entry.phase ?? state.settings.lastPhase;
   state.settings.lastArea = entry.area ?? state.settings.lastArea;
+  // Remember the worker's rate — crews type it once, not every day.
+  if (entry.kind === "labor" && entry.hourly_rate != null) {
+    state.settings.lastRate = String(entry.hourly_rate);
+  }
   // Adding to a submitted day marks the day amended (PRD §5.1 daily submit).
   const day = state.days[dayKey(entry.work_date)];
   if (day && day.status === "submitted") day.status = "amended";

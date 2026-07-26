@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { File, Paths } from "expo-file-system";
+import * as Location from "expo-location";
 import FloatingLabelInput from "../components/FloatingLabelInput";
 import { BigButton, Card, Label, Muted, PickRow } from "../components/ui";
 import { phaseLabel } from "../i18n";
@@ -52,9 +53,31 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
     setAssets((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  // GPS tag (PRD §5.1 photos auto-tag GPS). One fix per batch, never blocks:
+  // denied permission or no fix within a beat → photos save untagged. Foreground
+  // only, at the moment of upload — no background location (PRD §9.1).
+  async function grabGps() {
+    if (Platform.OS === "web") return null;
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return null;
+      const pos =
+        (await Location.getLastKnownPositionAsync()) ??
+        (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+      if (!pos) return null;
+      return {
+        gps_lat: Number(pos.coords.latitude.toFixed(6)),
+        gps_lng: Number(pos.coords.longitude.toFixed(6)),
+      };
+    } catch {
+      return null;
+    }
+  }
+
   // The official confirmation — only now does anything persist.
   async function upload() {
     if (!assets.length) return;
+    const gps = await grabGps();
     let seq = nextPhotoSeq(workDate);
     for (const a of assets) {
       const filename = photoFilename(workDate, seq++);
@@ -77,6 +100,7 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
         area,
         line_id: lineId,
         captured_at: new Date().toISOString(),
+        ...(gps ?? {}),
       });
     }
     onDone();

@@ -25,6 +25,12 @@
     },
     "plugins": [
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Kaicon Field tags site photos with the job location so the daily log shows where work happened."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "cameraPermission": "Kaicon Field uses the camera to photograph completed work for the daily log.",

@@ -30,7 +30,8 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
   const isSM = me?.role === "site_manager";
   const [hours, setHours] = useState("");
   const [hourType, setHourType] = useState("regular");
-  const [rate, setRate] = useState("");
+  // Prefilled from the last saved entry — returning workers only type hours.
+  const [rate, setRate] = useState(st.lastRate ?? "");
   const [phase, setPhase] = useState(st.lastPhase);
   const [area, setArea] = useState(st.lastArea);
   const [note, setNote] = useState("");
