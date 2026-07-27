@@ -7,7 +7,7 @@ import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "
 import * as ImagePicker from "expo-image-picker";
 import { Btn, Card, ChipWall, Field, GroupLabel, Muted, preferred } from "../components/ui";
 import { REQUIRE_PHONE_VERIFICATION, TRADES } from "../schema";
-import { createProfile, logIn, profiles } from "../store";
+import { createProfile, joinByCode, logIn, profiles, resolveShareCode } from "../store";
 import { colors, fonts, type } from "../theme";
 
 const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
@@ -28,6 +28,11 @@ export default function AuthScreen({ t, lang, onDone }) {
   const [role, setRole] = useState(null);
   const [trade, setTrade] = useState(null);
   const [selfie, setSelfie] = useState(null);
+  // Crew must join a site manager's project list at signup (business rule):
+  // they can't record against a project that no manager owns.
+  const [mgrCode, setMgrCode] = useState("");
+  const [mgrCodeErr, setMgrCodeErr] = useState(false);
+  const isCrew = role === "journeyman";
   const [err, setErr] = useState(null);
   const [verifying, setVerifying] = useState(false);
   const [code, setCode] = useState("");
@@ -81,11 +86,20 @@ export default function AuthScreen({ t, lang, onDone }) {
       phone: phone.replace(/\D/g, "") || null,
       role,
     });
+    // Crew join their manager's project list right after the profile exists.
+    if (isCrew && mgrCode.trim()) await joinByCode(mgrCode);
     onDone(p);
   }
 
   async function create() {
     if (!name.trim() || !role) return;
+    // Crew need a valid site-manager code before an account is created.
+    if (isCrew) {
+      if (!resolveShareCode(mgrCode)) {
+        setMgrCodeErr(true);
+        return;
+      }
+    }
     if (REQUIRE_PHONE_VERIFICATION) {
       if (!phone.trim()) return;
       setVerifying(true);
@@ -163,6 +177,20 @@ export default function AuthScreen({ t, lang, onDone }) {
             );
           })}
         </View>
+        {/* Crew must be attached to a site manager's project list. */}
+        {isCrew && (
+          <View style={{ marginTop: 16 }}>
+            <Field
+              label={t("joinCodeLabel")}
+              value={mgrCode}
+              onChangeText={(x) => { setMgrCode(x.toUpperCase()); setMgrCodeErr(false); }}
+              autoCapitalize="characters"
+              placeholder="KP-7F3A"
+              hint={t("joinCodeHint")}
+            />
+            {mgrCodeErr && <Text style={s.err}>{t("joinFailed")}</Text>}
+          </View>
+        )}
         <GroupLabel right={t("optional")} style={{ marginTop: 16 }}>{t("usualTrade")}</GroupLabel>
         <ChipWall options={TRADE_ORDER} value={trade} onChange={setTrade} renderLabel={(o) => o[lang] ?? o.en} show={5} />
       </Card>
@@ -198,7 +226,7 @@ export default function AuthScreen({ t, lang, onDone }) {
 
       {!verifying && (
         <View style={{ paddingHorizontal: 14, gap: 10 }}>
-          <Btn label={REQUIRE_PHONE_VERIFICATION ? t("sendCode") : t("start")} onPress={create} disabled={!role || !name.trim()} />
+          <Btn label={REQUIRE_PHONE_VERIFICATION ? t("sendCode") : t("start")} onPress={create} disabled={!role || !name.trim() || (isCrew && mgrCode.trim().length < 4)} />
           {existing.length > 0 && <Btn label={t("logIn")} onPress={() => setCreating(false)} variant="outline" />}
         </View>
       )}

@@ -148,6 +148,13 @@ export function myShareCode() {
   return me ? shareCodeFor(me.worker_id) : null;
 }
 
+// Resolve a share code to its site-manager profile without mutating anything —
+// used to validate a crew member's code at signup before the account exists.
+export function resolveShareCode(rawCode) {
+  const code = String(rawCode || "").trim().toUpperCase();
+  return (state?.profiles ?? []).find((p) => p.role === "site_manager" && shareCodeFor(p.worker_id) === code) ?? null;
+}
+
 // Projects the active worker can see: a manager sees the ones they created; a
 // crew member sees the ones from managers whose code they've joined.
 export function myProjects() {
