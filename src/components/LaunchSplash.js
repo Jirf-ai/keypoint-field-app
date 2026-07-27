@@ -7,7 +7,7 @@ import {
   AccessibilityInfo, Animated, Easing, StyleSheet, Text, View,
   useWindowDimensions,
 } from "react-native";
-import { colors } from "../theme";
+import { colors, fonts } from "../theme";
 
 const TURN_MS = 1350;
 const DOCK_MS = 680;
@@ -27,6 +27,7 @@ export function LogoRow({ gemTransform }) {
         </Animated.View>
       </View>
       <Text style={l.wordmark}>Keypoint Field</Text>
+      {/* brand lockup renders as mono caps via style textTransform */}
     </View>
   );
 }
@@ -132,5 +133,8 @@ const l = StyleSheet.create({
     width: "100%", height: "100%", backgroundColor: colors.brand,
     borderRadius: 3, transform: [{ rotate: "45deg" }, { scale: 0.74 }],
   },
-  wordmark: { fontSize: 16.5, fontWeight: "800", letterSpacing: -0.3, color: colors.text },
+  wordmark: {
+    fontFamily: fonts.mono, fontSize: 12, fontWeight: "700",
+    letterSpacing: 2.1, textTransform: "uppercase", color: colors.text,
+  },
 });

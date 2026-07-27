@@ -1,13 +1,27 @@
-// End-of-day review → submit. Submit locks the day; anything added after is
-// marked an amendment — never overwritten, never deleted (PRD §5.1).
+// End-of-day review → submit. Submit locks the day; anything added after is an
+// amendment — never overwritten, never deleted (PRD §5.1). Reads as a ledger:
+// big total, a mono stat strip, then one row per cost class (§2.5).
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { BigButton, Card, Label, Muted } from "../components/ui";
-import { activeLines, dayStatus, photosFor, submitDay, todayTotals } from "../store";
+import { parseProject } from "../components/ProjectPicker";
+import { ClassBadge, FormScreen, GroupLabel, StickyFooter, usdCents } from "../components/ui";
+import { CLASS_LABELS, colors, fonts, type } from "../theme";
+import { activeLines, currentProject, dayStatus, photosFor, submitDay, todayTotals } from "../store";
 import { syncNow } from "../sync";
-import { CLASS_COLORS, colors } from "../theme";
 
-function usd(n) {
-  return `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+function dateLine(workDate) {
+  const d = new Date(workDate + "T12:00:00");
+  const wd = d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+  const mo = d.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+  return `${wd} ${d.getDate()} ${mo} ${d.getFullYear()}`;
+}
+
+function Stat({ label, value, zero }) {
+  return (
+    <View style={s.statCol}>
+      <Text style={s.statLabel}>{label}</Text>
+      <Text style={[s.statValue, zero && { color: colors.placeholder }]}>{value}</Text>
+    </View>
+  );
 }
 
 export default function ReviewScreen({ t, workDate, onDone }) {
@@ -15,67 +29,59 @@ export default function ReviewScreen({ t, workDate, onDone }) {
   const lines = activeLines(workDate);
   const photos = photosFor(workDate);
   const status = dayStatus(workDate);
-  const rework = lines
-    .filter((l) => l.kind === "labor" && l.hour_type === "rework")
-    .reduce((n, l) => n + Number(l.hours || 0), 0);
+  const project = currentProject();
+  const code = project ? parseProject(project).code : "";
+  const classes = Object.entries(totals.byClass).filter(([, v]) => v > 0);
 
   async function submit() {
     await submitDay(workDate);
-    syncNow(); // push the day + its rows right away; fails silently offline
+    syncNow();
     onDone();
   }
 
   return (
-    <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
-      <Card>
-        <Label>{t("reviewTitle")} — {workDate}</Label>
-        <Text style={s.big}>{usd(totals.money)}</Text>
-        <Muted>
-          {totals.count} {t("lines")} · {totals.hours} {t("laborHours")} · {photos.length}{" "}
-          {t("photosToday")}
-        </Muted>
-        <View style={s.classRow}>
-          {Object.entries(totals.byClass).map(([k, v]) =>
-            v > 0 ? (
-              <View key={k} style={[s.classPill, { backgroundColor: CLASS_COLORS[k].bg }]}>
-                <Text style={[s.classPillText, { color: CLASS_COLORS[k].color }]}>
-                  {k} {usd(v)}
-                </Text>
-              </View>
-            ) : null
-          )}
+    <FormScreen
+      footer={<StickyFooter onCancel={onDone} cancelLabel={t("cancel")} primaryLabel={status === "draft" ? t("submitDay") : t("submitted")} onPrimary={submit} tone="green" disabled={status !== "draft"} />}
+    >
+      <View style={s.card}>
+        <Text style={s.metaLine}>{dateLine(workDate)}  ·  {code}</Text>
+        <Text style={s.big}>{usdCents(totals.money)}</Text>
+
+        <View style={s.stripRow}>
+          <Stat label={t("statLines")} value={String(totals.count)} zero={totals.count === 0} />
+          <Stat label={t("statHours")} value={Number(totals.hours).toFixed(1)} zero={Number(totals.hours) === 0} />
+          <Stat label={t("statPhotos")} value={String(photos.length)} zero={photos.length === 0} />
         </View>
-        {rework > 0 && (
-          <Muted style={{ marginTop: 8 }}>⟲ {rework}h rework</Muted>
-        )}
-      </Card>
 
-      <Card>
-        <Muted>{t("submitLocks")}</Muted>
-      </Card>
-
-      <View style={{ paddingHorizontal: 16, gap: 10 }}>
-        <BigButton
-          label={status === "draft" ? t("submitDay") : t("submitted")}
-          onPress={submit}
-          tone="green"
-          disabled={status !== "draft"}
-        />
-        <BigButton label={t("cancel")} onPress={onDone} tone="plain" />
+        {classes.map(([k, v]) => (
+          <View key={k} style={s.classRow}>
+            <ClassBadge cls={k} size={28} />
+            <Text style={s.className}>{CLASS_LABELS[k] ?? k}</Text>
+            <Text style={type.rowAmount}>{usdCents(v)}</Text>
+          </View>
+        ))}
       </View>
-    </ScrollView>
+
+      <View style={s.notice}>
+        <Text style={s.noticeLabel}>{t("thisLocksDay")}</Text>
+        <Text style={s.noticeBody}>{t("lockBody")}</Text>
+      </View>
+    </FormScreen>
   );
 }
 
 const s = StyleSheet.create({
-  big: {
-    color: colors.text,
-    fontSize: 30,
-    fontWeight: "800",
-    fontVariant: ["tabular-nums"],
-    marginBottom: 2,
-  },
-  classRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  classPill: { borderRadius: 999, paddingVertical: 7, paddingHorizontal: 13 },
-  classPillText: { fontWeight: "800", fontSize: 13.5, fontVariant: ["tabular-nums"] },
+  card: { backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginHorizontal: 14, marginBottom: 10, padding: 16 },
+  metaLine: { fontFamily: fonts.mono, fontSize: 11, fontWeight: "600", letterSpacing: 0.4, color: colors.textMuted, textTransform: "uppercase" },
+  big: { ...type.moneySubmit, marginTop: 6 },
+  stripRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: colors.border, marginTop: 14, paddingTop: 12 },
+  statCol: { flex: 1 },
+  statLabel: { fontFamily: fonts.mono, fontSize: 9.5, fontWeight: "600", letterSpacing: 1.2, textTransform: "uppercase", color: colors.label },
+  statValue: { fontFamily: fonts.mono, fontSize: 18, fontWeight: "700", color: colors.text, marginTop: 3, fontVariant: ["tabular-nums"] },
+  classRow: { flexDirection: "row", alignItems: "center", gap: 11, borderTopWidth: 1, borderTopColor: colors.border, marginTop: 14, paddingTop: 12 },
+  className: { flex: 1, fontFamily: fonts.body, fontSize: 14, fontWeight: "600", color: colors.text },
+
+  notice: { backgroundColor: "#a1620712", borderWidth: 1, borderColor: "#a1620733", borderRadius: 12, marginHorizontal: 14, padding: 14 },
+  noticeLabel: { fontFamily: fonts.mono, fontSize: 10, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase", color: colors.amber },
+  noticeBody: { fontFamily: fonts.body, fontSize: 13, lineHeight: 19, color: colors.textSecondary, marginTop: 6 },
 });

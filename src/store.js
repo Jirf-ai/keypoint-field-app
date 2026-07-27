@@ -29,6 +29,10 @@ const EMPTY = {
   // Records; everything below partitions by current_project.id (Records uuid).
   current_project: null,      // { id, name, status }
   recent_projects: [],        // most recent first, deduped, capped
+  // Team projects (2026-07-27): site managers create projects on-device; crew
+  // join a manager's list with a share code. Local-first — these ride the same
+  // append-only store and reconcile server-side when sync lands.
+  owned_projects: [],         // { id, name, address, status, owner_id, created_at }
   lines: [],          // items + labor, append-only ({kind: 'item'|'labor'})
   photos: [],
   change_orders: [],
@@ -44,6 +48,14 @@ export async function load() {
   } catch {
     state = { ...EMPTY };
   }
+  // One-time migration: before this change current_project was global. Hand it
+  // to whoever is currently logged in so they don't lose their project.
+  const me = activeProfile();
+  if (me && me.current_project === undefined && state.current_project) {
+    me.current_project = state.current_project;
+    me.recent_projects = state.recent_projects ?? [];
+  }
+  applyProfileContext();
   return state;
 }
 
@@ -89,12 +101,28 @@ function stamp(entry) {
 
 const RECENTS_MAX = 6;
 
+// current_project / recent_projects live PER PROFILE (each worker keeps their
+// own selection across switches). state.current_project is a mirror of the
+// active profile's value so the many direct `state.current_project` reads in
+// selectors keep working; applyProfileContext() re-points the mirror on every
+// login / switch / set.
+function applyProfileContext() {
+  const me = activeProfile();
+  state.current_project = me?.current_project ?? null;
+  state.recent_projects = me?.recent_projects ?? [];
+}
+
 export async function setCurrentProject(p) {
   state.current_project = { id: p.id, name: p.name, status: p.status ?? null };
   state.recent_projects = [
     state.current_project,
     ...state.recent_projects.filter((x) => x.id !== p.id),
   ].slice(0, RECENTS_MAX);
+  const me = activeProfile();
+  if (me) {
+    me.current_project = state.current_project;
+    me.recent_projects = state.recent_projects;
+  }
   await persist();
   return state.current_project;
 }
@@ -105,6 +133,64 @@ export function currentProject() {
 
 export function recentProjects() {
   return state?.recent_projects ?? [];
+}
+
+// ---------------------------------------------------------- team projects
+// A manager's share code is derived from their worker_id so it's stable and
+// needs no extra storage. Crew type it to join that manager's project list.
+export function shareCodeFor(worker_id) {
+  const s = String(worker_id || "").replace(/[^a-z0-9]/gi, "").slice(0, 4).toUpperCase();
+  return `KP-${s || "0000"}`;
+}
+
+export function myShareCode() {
+  const me = activeProfile();
+  return me ? shareCodeFor(me.worker_id) : null;
+}
+
+// Projects the active worker can see: a manager sees the ones they created; a
+// crew member sees the ones from managers whose code they've joined.
+export function myProjects() {
+  const me = activeProfile();
+  if (!me) return [];
+  const owned = state.owned_projects ?? [];
+  if (me.role === "site_manager") return owned.filter((p) => p.owner_id === me.worker_id);
+  const joined = me.joined_owner_ids ?? [];
+  return owned.filter((p) => joined.includes(p.owner_id));
+}
+
+// Site manager creates a project. Client-generated id keeps future sync
+// idempotent; the new project is selected immediately.
+export async function addOwnedProject({ name, address, status }) {
+  const me = activeProfile();
+  const p = {
+    id: uuid(),
+    name: (name || "").trim(),
+    address: (address || "").trim() || null,
+    status: status || "active",
+    owner_id: me?.worker_id ?? null,
+    created_by: me?.display_name ?? null,
+    created_at: new Date().toISOString(),
+  };
+  state.owned_projects = [p, ...(state.owned_projects ?? [])];
+  await setCurrentProject(p); // persists
+  return p;
+}
+
+// Crew joins a manager's list by code. Resolves the code to a profile on this
+// device (sync resolves it server-side once the backend lands).
+export async function joinByCode(rawCode) {
+  const me = activeProfile();
+  if (!me) return { ok: false, reason: "no_profile" };
+  const code = String(rawCode || "").trim().toUpperCase();
+  const owner = (state.profiles ?? []).find(
+    (p) => p.worker_id !== me.worker_id && p.role === "site_manager" && shareCodeFor(p.worker_id) === code
+  );
+  if (!owner) return { ok: false, reason: "not_found" };
+  me.joined_owner_ids = Array.from(new Set([...(me.joined_owner_ids ?? []), owner.worker_id]));
+  await persist();
+  const projects = (state.owned_projects ?? []).filter((p) => p.owner_id === owner.worker_id);
+  return { ok: true, owner: owner.display_name, code, projects };
 }
 
 export async function saveSettings(patch) {
@@ -139,12 +225,14 @@ export async function logIn(worker_id) {
   state.active_worker_id = worker_id;
   state.settings.recorded_by = p.display_name;
   state.settings.lang = p.preferred_language ?? state.settings.lang;
+  applyProfileContext(); // restore this worker's own current project + recents
   await persist();
   return p;
 }
 
 export async function logOut() {
   state.active_worker_id = null;
+  applyProfileContext(); // no active worker → clear the mirror
   await persist();
 }
 
