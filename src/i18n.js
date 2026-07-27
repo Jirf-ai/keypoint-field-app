@@ -71,6 +71,8 @@ export const STRINGS = {
     joinedOk: "Joined",
     joinFailed: "No list found for that code — check it with your site manager.",
     noProjectsYet: "No projects yet.",
+    projectsLabel: "Projects",
+    close: "Close",
     addMaterial: "+ Material / Item",
     addLabor: "+ Hours",
     addPhoto: "+ Photo",

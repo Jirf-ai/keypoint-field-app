@@ -6,9 +6,10 @@ import { Image, Platform, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, 
 import * as SplashScreen from "expo-splash-screen";
 import FadeTransition from "./src/components/FadeTransition";
 import LaunchSplash, { LogoRow } from "./src/components/LaunchSplash";
+import ProjectsDrawer from "./src/components/ProjectsDrawer";
 import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
-import { activeProfile, getSettings, load, logOut, pendingCount, saveSettings } from "./src/store";
+import { activeProfile, currentProject, getSettings, load, logOut, myProjects, myShareCode, pendingCount, recentProjects, saveSettings, setCurrentProject } from "./src/store";
 import { syncNow } from "./src/sync";
 import AuthScreen from "./src/screens/AuthScreen";
 import AddItemScreen from "./src/screens/AddItemScreen";
@@ -96,6 +97,8 @@ export default function App() {
   // Photo-first flow: an inbox photo tapped on Today opens the material form
   // with the photo attached (linked to the new line on save).
   const [fromPhoto, setFromPhoto] = useState(null);
+  // Projects drawer (Option A) — opened from the header avatar.
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const workDate = todayStr();
   const t = makeT(lang);
@@ -150,6 +153,17 @@ export default function App() {
   const nav = (name) => setScreen(name);
   const pending = pendingCount();
   const authed = !!profile;
+  // All the worker's projects for the drawer: current + owned/joined + recents,
+  // deduped, current first.
+  const drawerProjects = () => {
+    const seen = new Set();
+    const list = [];
+    const push = (p) => { if (p && p.id && !seen.has(p.id)) { seen.add(p.id); list.push(p); } };
+    push(currentProject());
+    myProjects().forEach(push);
+    recentProjects().forEach(push);
+    return list;
+  };
   const showLogoHeader = !authed || screen === "today";
   const changeLang = (c) => {
     setLang(c);
@@ -176,7 +190,7 @@ export default function App() {
                   Worker avatar (their selfie) taps through to settings. */}
               <View style={s.headerLeft}>
                 {authed && (
-                  <Pressable onPress={() => setScreen("settings")} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("settings")}>
+                  <Pressable onPress={() => setDrawerOpen(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("projectsLabel")}>
                     <ProfileAvatar profile={profile} />
                   </Pressable>
                 )}
@@ -247,6 +261,27 @@ export default function App() {
           />
         )}
         </FadeTransition>
+
+        {authed && (
+          <ProjectsDrawer
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            t={t}
+            profile={profile}
+            role={profile?.role}
+            current={currentProject()}
+            projects={drawerProjects()}
+            shareCode={myShareCode()}
+            onPick={async (p) => {
+              await setCurrentProject(p);
+              setDrawerOpen(false);
+              setScreen("today");
+              setTick((x) => x + 1);
+            }}
+            onAdd={() => { setDrawerOpen(false); setScreen("addproject"); }}
+            onJoin={() => { setDrawerOpen(false); setScreen("joinlist"); }}
+          />
+        )}
       </View>
       {!splashDone && <LaunchSplash dock={dock} onDone={() => setSplashDone(true)} />}
     </SafeAreaView>
