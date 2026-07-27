@@ -155,7 +155,9 @@ export default function AuthScreen({ t, lang, onDone }) {
   }
 
   async function create() {
-    if (!name.trim() || !role || !teamCode.trim()) return;
+    // Full signup, no shortcuts: name, role, team code AND the selfie — the
+    // GC code authorizes the profile, it never replaces registration.
+    if (!name.trim() || !role || !teamCode.trim() || !selfie) return;
     // Crew need a valid site-manager code before an account is created.
     if (isCrew) {
       if (!resolveShareCode(mgrCode)) {
@@ -443,7 +445,7 @@ export default function AuthScreen({ t, lang, onDone }) {
           <Btn
             label={REQUIRE_PHONE_VERIFICATION ? t("sendCode") : t("start")}
             onPress={create}
-            disabled={busy || !role || !name.trim() || !teamCode.trim() || (isCrew && mgrCode.trim().length < 4)}
+            disabled={busy || !role || !name.trim() || !teamCode.trim() || !selfie || (isCrew && mgrCode.trim().length < 4)}
           />
           {existing.length > 0 && <Btn label={t("logIn")} onPress={() => setCreating(false)} variant="outline" />}
           <Btn label={`🏗  ${t("gcEntry")}`} onPress={() => setGcMode(gc ? "code" : "register")} variant="outline" />
