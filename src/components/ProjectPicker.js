@@ -1,23 +1,37 @@
-// Project selector — tap the address to open: recent projects to tap, and a
-// search box that typeaheads against the Records engine (more letters →
-// tighter match). A brand-new worker sees "Find your project" and searches;
-// recents make every later switch two taps and work offline.
+// Project selector — the sand PROJECT PLATE is the switcher target (§2.1).
+// Tapping it (or the dashed orange "find your project" slot when none is set)
+// opens the typeahead: a search box against the Records engine plus recents.
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { searchProjects } from "../api";
-import FloatingLabelInput from "./FloatingLabelInput";
-import { Card, Label, Muted } from "./ui";
-import { colors, radius } from "../theme";
+import { Card, Field, Muted, ProjectPlate, StatusPill } from "./ui";
+import { myProjects, myShareCode } from "../store";
+import { colors, fonts, radius, type } from "../theme";
 
-// Role-colored live dot: bright purple = the site manager is logged into this
-// project; green = crew. One glance tells anyone whose device is running.
-const DOT = {
-  site_manager: "#A855F7",
-  journeyman: "#15803d",
-};
+// Records returns { id, name, status }. The plate wants a code, a clean display
+// name (address suffix dropped) and a city — derive them here. The 1257 pilot
+// is special-cased to its real project record; address-style names are parsed.
+export function parseProject(p) {
+  const name = p?.name ?? "";
+  const low = name.toLowerCase();
+  if (low.includes("1257") || low.includes("bao") || low.includes("inspiration")) {
+    return { code: "1257-INSP", display: "Bao Residence — Main Addition", city: "West Covina", address: "1257 Inspiration Point, West Covina, CA 91791" };
+  }
+  const parts = name.split(",").map((x) => x.trim());
+  const street = parts[0] || name;
+  const city = parts[1] || "";
+  const m = street.match(/^(\d+)\s+([A-Za-z]+)/);
+  const code = m ? `${m[1]}-${m[2].slice(0, 3).toUpperCase()}` : name.replace(/[^A-Za-z0-9]/g, "").slice(0, 6).toUpperCase();
+  return { code, display: street, city, address: name };
+}
 
-export default function ProjectPicker({ t, current, recents, onSelect, role }) {
-  const dotColor = DOT[role] ?? DOT.journeyman;
+function statusColor(status) {
+  return status === "active"
+    ? { color: "#15803d", bg: "#15803d18" }
+    : { color: colors.textMuted, bg: "rgba(42,38,34,0.08)" };
+}
+
+export default function ProjectPicker({ t, current, recents, onSelect, role, dateLabel, onAddProject, onJoin }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
@@ -51,99 +65,97 @@ export default function ProjectPicker({ t, current, recents, onSelect, role }) {
     onSelect(p);
   }
 
-  // The recents array — current project first (marked live), then the rest.
-  const recentList = current
-    ? [current, ...recents.filter((r) => r.id !== current.id)]
-    : recents;
+  const recentList = current ? [current, ...recents.filter((r) => r.id !== current.id)] : recents;
+  const meta = current ? parseProject(current) : null;
+  const isSM = role === "site_manager";
+  const mine = myProjects();
+  const shareCode = myShareCode();
 
-  // No project yet = the ONE thing to do. Render a full-width brand CTA with a
-  // slow breathing pulse until it's tapped; once a project exists, collapse to
-  // the compact address row.
-  const pulse = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (current || open) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [current, open]);
+  function act(cb) {
+    setOpen(false);
+    setQ("");
+    setResults([]);
+    cb?.();
+  }
 
   return (
     <View style={s.wrap}>
-      {!current && !open ? (
-        <Animated.View
-          style={{
-            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] }) }],
-          }}
-        >
-          <Pressable
-            onPress={() => setOpen(true)}
-            style={({ pressed }) => [s.cta, pressed && { opacity: 0.85 }]}
-            accessibilityRole="button"
-            accessibilityLabel={t("findProject")}
-          >
-            <Text style={s.ctaIcon}>🔍</Text>
-            <Text style={s.ctaText}>{t("findProject")}</Text>
-            <Text style={s.ctaChev}>▾</Text>
-          </Pressable>
-        </Animated.View>
+      {current ? (
+        <ProjectPlate code={meta.code} name={meta.display} role={role} city={meta.city} date={dateLabel} onPress={() => setOpen(!open)} />
       ) : (
-        <Pressable
-          onPress={() => setOpen(!open)}
-          style={s.head}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: open }}
-          accessibilityLabel={current?.name ?? t("findProject")}
-        >
-          <Text style={[s.name, !current && s.namePlaceholder]} numberOfLines={1}>
-            {current?.name ?? t("findProject")}
-          </Text>
-          {/* Dot = confirmed into this project; color tells the role. */}
-          {current && (
-            <View
-              style={[s.liveDot, { backgroundColor: dotColor, shadowColor: dotColor }]}
-              accessibilityLabel={role === "site_manager" ? "Project active — site manager" : "Project active"}
-            />
-          )}
-          <Text style={s.chev}>{open ? "▴" : "▾"}</Text>
+        <Pressable onPress={() => setOpen(!open)} style={s.slot} accessibilityRole="button" accessibilityLabel={t("findProject")}>
+          <Text style={s.slotTitle}>{t("findProject")}</Text>
+          <Text style={s.slotSub}>{t("findProjectSub")}</Text>
         </Pressable>
       )}
 
       {open && (
         <Card style={s.drop}>
-          <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 380 }}>
-            <FloatingLabelInput
-              label={t("typeAddress")}
-              value={q}
-              onChangeText={setQ}
-              autoCapitalize="none"
-            />
-            {searching && <ActivityIndicator style={{ marginTop: 10 }} color={colors.brand} />}
-            {results.map((p) => (
-              <Pressable key={p.id} style={s.row} onPress={() => pick(p)} accessibilityRole="button">
-                <Text style={s.rowName} numberOfLines={1}>{p.name}</Text>
-                {p.status ? <Text style={s.rowStatus}>{p.status}</Text> : null}
+          <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 460 }}>
+            {/* Site managers add projects; crew join a manager's list by code. */}
+            {isSM ? (
+              <Pressable style={s.action} onPress={() => act(onAddProject)} accessibilityRole="button" accessibilityLabel={t("addProject")}>
+                <Text style={s.actionText}>+ {t("addProject")}</Text>
               </Pressable>
-            ))}
-            {noHit && <Muted style={{ marginTop: 10 }}>{t("noProjectFound")}</Muted>}
+            ) : (
+              <Pressable style={s.action} onPress={() => act(onJoin)} accessibilityRole="button" accessibilityLabel={t("joinList")}>
+                <Text style={s.actionText}>{t("joinList")} ▸</Text>
+              </Pressable>
+            )}
+            {isSM && shareCode ? (
+              <Text style={s.shareLine}>{t("shareCodeInline")} <Text style={s.shareCode}>{shareCode}</Text></Text>
+            ) : null}
+
+            {mine.length > 0 && (
+              <>
+                <Text style={[type.groupLabel, { marginTop: 14, marginBottom: 6 }]}>{isSM ? t("yourProjects") : t("teamProjects")}</Text>
+                {mine.map((p) => {
+                  const m = parseProject(p);
+                  const isCur = p.id === current?.id;
+                  return (
+                    <Pressable key={p.id} style={s.recentRow} onPress={() => pick(p)} accessibilityRole="button">
+                      <Text style={[s.recentName, isCur && { fontWeight: "700" }]} numberOfLines={1}>{p.name}</Text>
+                      <Text style={type.projectCode}>{m.code}</Text>
+                    </Pressable>
+                  );
+                })}
+              </>
+            )}
+
+            <View style={{ marginTop: 16 }}>
+              <Field label={t("projectAddressLabel")} value={q} onChangeText={setQ} autoCapitalize="none" placeholder={t("typeAddress")} />
+            </View>
+            {q.trim().length >= 3 && !searching && (
+              <Text style={s.count}>
+                {results.length} {results.length === 1 ? t("matchOne") : t("matchMany")} · {t("searchingRecords")}
+              </Text>
+            )}
+            {searching && <ActivityIndicator style={{ marginTop: 12 }} color={colors.accent} />}
+            {results.map((p) => {
+              const m = parseProject(p);
+              return (
+                <Pressable key={p.id} style={s.resultCard} onPress={() => pick(p)} accessibilityRole="button" accessibilityLabel={m.display}>
+                  <View style={s.resultRow1}>
+                    <Text style={type.projectCode}>{m.code}</Text>
+                    {p.status ? <StatusPill label={p.status} color={statusColor(p.status)} /> : null}
+                  </View>
+                  <Text style={s.resultName}>{m.display}</Text>
+                  <Text style={s.resultAddr}>{m.address}</Text>
+                </Pressable>
+              );
+            })}
+            {noHit && <Muted style={{ marginTop: 12 }}>{t("noProjectFound")}</Muted>}
 
             {recentList.length > 0 && (
               <>
-                <Label>{t("recentProjects")}</Label>
-                {/* No dots in the list — the green dot belongs ONLY to the
-                    activated project in the title row. Rows here are options;
-                    the current one just reads bold. */}
+                <Text style={[type.groupLabel, { marginTop: 16, marginBottom: 6 }]}>{t("recentProjects")}</Text>
                 {recentList.map((p) => {
-                  const isCurrent = p.id === current?.id;
+                  const m = parseProject(p);
+                  const isCur = p.id === current?.id;
                   return (
-                    <Pressable key={p.id} style={s.row} onPress={() => pick(p)} accessibilityRole="button">
-                      <Text style={[s.rowName, isCurrent && s.rowCurrent]} numberOfLines={1}>
-                        {p.name}
-                      </Text>
+                    <Pressable key={p.id} style={s.recentRow} onPress={() => pick(p)} accessibilityRole="button">
+                      <Text style={[s.recentName, isCur && { fontWeight: "700" }]} numberOfLines={1}>{m.display}</Text>
+                      <Text style={type.projectCode}>{m.code}</Text>
                     </Pressable>
                   );
                 })}
@@ -157,68 +169,55 @@ export default function ProjectPicker({ t, current, recents, onSelect, role }) {
 }
 
 const s = StyleSheet.create({
-  cta: {
-    flexDirection: "row",
+  wrap: { zIndex: 100 },
+  slot: {
+    backgroundColor: "#d95a1f0d",
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "rgba(217,90,31,0.5)",
+    borderRadius: radius.card,
+    marginHorizontal: 14,
+    paddingVertical: 18,
+    paddingHorizontal: 14,
+    alignItems: "center",
+  },
+  slotTitle: { fontFamily: fonts.display, fontSize: 17, fontWeight: "700", color: colors.accent },
+  slotSub: { fontFamily: fonts.body, fontSize: 12.5, color: colors.textMuted, marginTop: 3, textAlign: "center" },
+  drop: { marginTop: 8 },
+  action: {
+    minHeight: 46,
+    borderRadius: radius.input,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "rgba(217,90,31,0.5)",
+    backgroundColor: "#d95a1f0d",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    backgroundColor: colors.brand,
-    borderRadius: radius.input,
-    minHeight: 58,
-    paddingHorizontal: 18,
-    shadowColor: colors.brand,
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    paddingHorizontal: 14,
   },
-  ctaIcon: { fontSize: 18 },
-  ctaText: { color: "#fff", fontSize: 17, fontWeight: "800", letterSpacing: 0.2 },
-  ctaChev: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  head: {
+  actionText: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "700", color: colors.accent },
+  shareLine: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, marginTop: 8, textAlign: "center" },
+  shareCode: { fontFamily: fonts.mono, fontSize: 12, fontWeight: "700", color: colors.accent },
+  count: { fontFamily: fonts.body, fontSize: 11.5, color: colors.textMuted, marginTop: 10, marginBottom: 2 },
+  resultCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: colors.bg,
+    padding: 12,
+    marginTop: 10,
+  },
+  resultRow1: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  resultName: { fontFamily: fonts.body, fontSize: 15, fontWeight: "700", color: colors.text, marginTop: 5 },
+  resultAddr: { fontFamily: fonts.body, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
+  recentRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
-    paddingVertical: 2,
-  },
-  name: { color: colors.text, fontSize: 16, fontWeight: "800", flexShrink: 1 },
-  liveDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: colors.green,
-    shadowColor: colors.green,
-    shadowOpacity: 0.6,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 0 },
-  },
-  namePlaceholder: { color: colors.brand },
-  chev: { color: colors.brand, fontSize: 14, fontWeight: "800" },
-  // Overlay panel: floats OVER the page content (nothing shifts down).
-  wrap: { zIndex: 100 },
-  drop: {
-    position: "absolute",
-    top: 34,
-    left: 0,
-    right: 0,
-    marginHorizontal: 0,
-    marginBottom: 0,
-    zIndex: 100,
-    elevation: 12,
-    shadowColor: "#0B1220",
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 10 },
-  },
-  rowCurrent: { fontWeight: "800" },
-  row: {
-    paddingVertical: 13,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 12,
+    borderTopWidth: 1,
     borderTopColor: colors.border,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
   },
-  rowName: { color: colors.text, fontSize: 15, fontWeight: "600", flex: 1 },
-  rowStatus: { color: colors.textMuted, fontSize: 12, textTransform: "uppercase", fontWeight: "700" },
+  recentName: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "600", color: colors.text, flex: 1 },
 });

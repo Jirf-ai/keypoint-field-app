@@ -1,14 +1,17 @@
-// + Hours — labor_entry (schema §4.4). Rework is a first-class, blame-free
-// choice: "if recording rework gets someone in trouble, it will never be
-// recorded." A missing rework note warns AFTER saving, never blocks.
+// + Hours — labor_entry (schema §4.4). Live math strip, segmented hour type,
+// collapsing pickers for trade/phase/area (open when there's nothing prefilled
+// from yesterday), sticky Cancel/Save footer. Rework stays blame-free: a missing
+// note warns AFTER saving, never blocks.
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import FloatingLabelInput from "../components/FloatingLabelInput";
-import { BigButton, Card, CollapsedPick, Label, Muted, PickRow } from "../components/ui";
+import { StyleSheet, Text, View } from "react-native";
+import { Card, Field, FormScreen, GroupLabel, NumericField, PickerRow, Segmented, StickyFooter, preferred } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { HOUR_TYPES, PHASES, TRADES, areasFor, validateLabor, laborWarnings } from "../schema";
 import { activeLines, activeProfile, addLine, currentProject, getSettings } from "../store";
-import { colors } from "../theme";
+import { colors, fonts, type } from "../theme";
+
+const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
+const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"]);
 
 const FIX_KEYS = {
   V_trade: "fixTrade",
@@ -17,26 +20,25 @@ const FIX_KEYS = {
   V_hour_type: "hourType",
   V_phase: "fixPhase",
   V_area: "fixArea",
+  V_worker: "worker",
 };
 
 export default function AddLaborScreen({ t, lang, workDate, onDone }) {
   const st = getSettings();
   const me = activeProfile();
   // The logged-in profile IS the worker — no name typing (Jeffrey 2026-07-24).
-  // Site managers can optionally flip to record for someone without the app.
+  const worker = me?.display_name || st.recorded_by || "";
   const [trade, setTrade] = useState(me?.default_trade ?? null);
-  const [worker, setWorker] = useState(me?.display_name || st.recorded_by || "");
-  const [forOther, setForOther] = useState(false);
-  const isSM = me?.role === "site_manager";
   const [hours, setHours] = useState("");
   const [hourType, setHourType] = useState("regular");
-  // Prefilled from the last saved entry — returning workers only type hours.
   const [rate, setRate] = useState(st.lastRate ?? "");
   const [phase, setPhase] = useState(st.lastPhase);
   const [area, setArea] = useState(st.lastArea);
   const [note, setNote] = useState("");
   const [errors, setErrors] = useState([]);
   const [warned, setWarned] = useState(null);
+
+  const total = Number(hours || 0) * Number(rate || 0);
 
   async function save() {
     const entry = {
@@ -69,97 +71,54 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
+    <FormScreen footer={<StickyFooter onCancel={onDone} cancelLabel={t("cancel")} primaryLabel={t("save")} onPrimary={save} />}>
       <Card>
-        {forOther ? (
-          <FloatingLabelInput label={t("worker")} value={worker} onChangeText={setWorker} />
-        ) : (
-          isSM && (
-            <Pressable onPress={() => { setForOther(true); setWorker(""); }} accessibilityRole="button">
-              <Muted style={{ marginBottom: 4 }}>{t("forSomeoneElse")}</Muted>
-            </Pressable>
-          )
-        )}
-
-        <View style={[s.row, { marginTop: 10 }]}>
-          <View style={{ flex: 1 }}>
-            <FloatingLabelInput
-              label={t("hours")}
-              value={hours}
-              onChangeText={(x) => setHours(x.replace(/[^0-9.]/g, ""))}
-              keyboardType="decimal-pad"
-              autoCapitalize="none"
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <FloatingLabelInput
-              label={t("rate")}
-              value={rate}
-              onChangeText={(x) => setRate(x.replace(/[^0-9.]/g, ""))}
-              keyboardType="decimal-pad"
-              autoCapitalize="none"
-            />
-          </View>
+        <View style={s.numRow}>
+          <NumericField label={t("hours")} value={hours} onChangeText={(x) => setHours(x.replace(/[^0-9.]/g, ""))} placeholder="0" style={{ flex: 1 }} />
+          <NumericField label={t("rate")} value={rate} onChangeText={(x) => setRate(x.replace(/[^0-9.]/g, ""))} placeholder="0" style={{ flex: 1 }} />
         </View>
-        {hours !== "" && rate !== "" && (
-          <Text style={s.total}>
-            = ${(Number(hours) * Number(rate)).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-          </Text>
-        )}
+        <View style={s.mathStrip}>
+          <Text style={s.mathLeft}>{hours || "0"} × {rate || "0"}</Text>
+          <Text style={type.moneyForm}>${total.toLocaleString("en-US", { maximumFractionDigits: 2 })}</Text>
+        </View>
+      </Card>
 
-        <Label>{t("hourType")}</Label>
-        <PickRow
-          options={HOUR_TYPES}
-          value={hourType}
-          onChange={setHourType}
-          renderLabel={(k) => t(k)}
-        />
-        {hourType === "rework" && <Muted style={s.gapTop}>{t("reworkBlameFree")}</Muted>}
+      <Card>
+        <GroupLabel>{t("hourType")}</GroupLabel>
+        <Segmented options={HOUR_TYPES} value={hourType} onChange={setHourType} renderLabel={(k) => t(k)} />
+        {hourType === "rework" && <Text style={s.reworkNote}>{t("reworkBlameFree")}</Text>}
 
-        {/* Pre-filled from profile / last use — collapsed one-liners; expand
-            only to change (schema still gets all required fields). */}
-        <View style={{ marginTop: 12 }}>
-          <CollapsedPick
+        <View style={{ marginTop: 14 }}>
+          <PickerRow
+            first
             label={t("trade")}
             value={trade}
-            displayValue={trade ? (TRADES.find((x) => x.code === trade)?.[lang] ?? trade) : null}
-            options={TRADES}
+            displayValue={trade ? TRADES.find((x) => x.code === trade)?.[lang] ?? trade : null}
+            options={TRADE_ORDER}
             onChange={setTrade}
             renderLabel={(o) => o[lang] ?? o.en}
+            show={5}
           />
-          <CollapsedPick
+          <PickerRow
             label={t("phase")}
             value={phase}
             displayValue={phase ? phaseLabel(phase, lang) : null}
-            options={PHASES}
+            options={PHASE_ORDER}
             onChange={setPhase}
             renderLabel={(p) => phaseLabel(p, lang)}
+            show={4}
           />
-          <CollapsedPick
-            label={t("area")}
-            value={area}
-            displayValue={area}
-            options={areasFor(currentProject()?.name)}
-            onChange={setArea}
-          />
+          <PickerRow label={t("area")} value={area} displayValue={area} options={areasFor(currentProject()?.name)} onChange={setArea} show={6} />
         </View>
 
-        <FloatingLabelInput
-          label={t("note")}
-          value={note}
-          onChangeText={setNote}
-          autoCapitalize="sentences"
-          style={s.gapTop}
-        />
+        <Field label={t("note")} value={note} onChangeText={setNote} autoCapitalize="sentences" style={{ marginTop: 14 }} placeholder="—" />
       </Card>
 
       {errors.length > 0 && (
         <Card style={s.errCard}>
           <Text style={s.errTitle}>{t("needFix")}</Text>
           {errors.map((e) => (
-            <Text key={e} style={s.errItem}>
-              • {t(FIX_KEYS[e] ?? (e === "V_worker" ? "worker" : e))}
-            </Text>
+            <Text key={e} style={s.errItem}>• {t(FIX_KEYS[e] ?? e)}</Text>
           ))}
         </Card>
       )}
@@ -168,28 +127,26 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
           <Text style={s.warnText}>{t(warned)}</Text>
         </Card>
       )}
-
-      <View style={{ paddingHorizontal: 16, gap: 10 }}>
-        <BigButton label={t("save")} onPress={save} />
-        <BigButton label={t("cancel")} onPress={onDone} tone="plain" />
-      </View>
-    </ScrollView>
+    </FormScreen>
   );
 }
 
 const s = StyleSheet.create({
-  row: { flexDirection: "row", gap: 10 },
-  gapTop: { marginTop: 10 },
-  total: {
-    color: colors.text,
-    fontWeight: "800",
-    fontSize: 18,
-    marginTop: 2,
-    fontVariant: ["tabular-nums"],
+  numRow: { flexDirection: "row", gap: 9 },
+  mathStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginTop: 12,
+    paddingTop: 10,
   },
-  errCard: { borderColor: "#FCD5D2", backgroundColor: "#FEF1F0" },
-  errTitle: { color: colors.red, fontWeight: "800", marginBottom: 6, fontSize: 15 },
-  errItem: { color: colors.red, fontSize: 14.5, lineHeight: 22 },
-  warnCard: { borderColor: "#FDE9C8", backgroundColor: "#FEF6E7" },
-  warnText: { color: "#a16207", fontSize: 14.5, lineHeight: 20 },
+  mathLeft: { fontFamily: fonts.mono, fontSize: 12, fontWeight: "600", color: colors.textMuted, textTransform: "uppercase", letterSpacing: 0.5, fontVariant: ["tabular-nums"] },
+  reworkNote: { fontFamily: fonts.body, color: colors.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 8 },
+  errCard: { borderColor: "#b91c1c33", backgroundColor: "#b91c1c0a" },
+  errTitle: { fontFamily: fonts.body, color: colors.red, fontWeight: "700", marginBottom: 6, fontSize: 14 },
+  errItem: { fontFamily: fonts.body, color: colors.red, fontSize: 14, lineHeight: 21 },
+  warnCard: { borderColor: "#a1620733", backgroundColor: "#a1620712" },
+  warnText: { fontFamily: fonts.body, color: colors.amber, fontSize: 14, lineHeight: 20 },
 });

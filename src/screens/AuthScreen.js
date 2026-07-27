@@ -1,16 +1,24 @@
 // Log in / create account — the gate after the splash. First-timers create a
-// profile (name + REQUIRED selfie + usual trade + language); returning workers
-// tap their face and they're in. After this, opening the app lands straight on
-// capture. Local profiles for the pilot; phone-OTP auth arrives with the sync
-// backend (Tech Eval stack).
+// profile (name + selfie + role + usual trade); returning workers tap their
+// face. Keypoint system: title on the cream ground, labelled fields, role as a
+// 2-up grid, trade as a collapsing chip wall, selfie as a framed prompt.
 import { useState } from "react";
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import FloatingLabelInput from "../components/FloatingLabelInput";
-import { BigButton, Card, Label, Muted, PickRow } from "../components/ui";
+import { Btn, Card, ChipWall, Field, GroupLabel, Muted, preferred } from "../components/ui";
 import { REQUIRE_PHONE_VERIFICATION, TRADES } from "../schema";
 import { createProfile, logIn, profiles } from "../store";
-import { colors, radius } from "../theme";
+import { colors, fonts, type } from "../theme";
+
+const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
+
+// Auto-format to (626) - 555 - 0100 — strip non-digits, cap 10.
+function formatPhone(v) {
+  const d = String(v).replace(/\D/g, "").slice(0, 10);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `(${d.slice(0, 3)}) - ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) - ${d.slice(3, 6)} - ${d.slice(6)}`;
+}
 
 export default function AuthScreen({ t, lang, onDone }) {
   const existing = profiles();
@@ -21,24 +29,15 @@ export default function AuthScreen({ t, lang, onDone }) {
   const [trade, setTrade] = useState(null);
   const [selfie, setSelfie] = useState(null);
   const [err, setErr] = useState(null);
-  // Phone confirmation step — rendered only when the public-release flag is
-  // on. Verification will run through Supabase phone-OTP; until that backend
-  // exists this UI is the contract, not the implementation.
   const [verifying, setVerifying] = useState(false);
   const [code, setCode] = useState("");
   const [codeErr, setCodeErr] = useState(false);
 
-  // Selfies persist as base64 data URIs — a blob: URL dies on page reload
-  // (web) and a cache path can be evicted (native). A profile photo must
-  // survive forever; it's small (square-cropped, half quality).
   function assetToUri(asset) {
     if (asset.base64) return `data:image/jpeg;base64,${asset.base64}`;
     return asset.uri;
   }
 
-  // Belt and suspenders: whatever the picker returned, guarantee a data: URI
-  // on web before it's stored (fetch the blob and re-encode). Never trust a
-  // blob: URL to outlive the session.
   async function ensureDurable(uri) {
     if (!uri || uri.startsWith("data:") || Platform.OS !== "web") return uri;
     try {
@@ -60,14 +59,10 @@ export default function AuthScreen({ t, lang, onDone }) {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       const res = perm.granted
-        ? await ImagePicker.launchCameraAsync({
-            ...opts,
-            cameraType: ImagePicker.CameraType?.front,
-          })
+        ? await ImagePicker.launchCameraAsync({ ...opts, cameraType: ImagePicker.CameraType?.front })
         : await ImagePicker.launchImageLibraryAsync(opts);
       if (!res.canceled && res.assets?.[0]) setSelfie(assetToUri(res.assets[0]));
     } catch {
-      // Web fallback: camera unsupported → library picker.
       try {
         const res = await ImagePicker.launchImageLibraryAsync(opts);
         if (!res.canceled && res.assets?.[0]) setSelfie(assetToUri(res.assets[0]));
@@ -83,26 +78,23 @@ export default function AuthScreen({ t, lang, onDone }) {
       default_trade: trade,
       lang,
       selfie_uri: await ensureDurable(selfie),
-      phone: phone.trim() || null,
+      phone: phone.replace(/\D/g, "") || null,
       role,
     });
     onDone(p);
   }
 
   async function create() {
-    if (!name.trim() || !selfie || !role) return;
+    if (!name.trim() || !role) return;
     if (REQUIRE_PHONE_VERIFICATION) {
       if (!phone.trim()) return;
-      // Public release: request OTP here (supabase.auth.signInWithOtp phone),
-      // then collect the code below.
       setVerifying(true);
       return;
     }
-    await finishCreate(); // pilot/internal: bypass on our terms
+    await finishCreate();
   }
 
   async function verifyCode() {
-    // Public release: supabase.auth.verifyOtp({ phone, token: code }).
     if (code.trim().length !== 6) {
       setCodeErr(true);
       return;
@@ -115,142 +107,127 @@ export default function AuthScreen({ t, lang, onDone }) {
     if (p) onDone(p);
   }
 
+  // ---- returning worker: pick a face ----
+  if (!creating) {
+    return (
+      <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
+        <View style={s.head}>
+          <Text style={type.screenTitle}>{t("logIn")}</Text>
+          <Text style={s.headSub}>{t("pickProfile")}</Text>
+        </View>
+        <Card>
+          <View style={s.faces}>
+            {existing.map((p) => (
+              <Pressable key={p.worker_id} style={s.face} onPress={() => pick(p.worker_id)} accessibilityRole="button" accessibilityLabel={p.display_name}>
+                {p.selfie_uri ? (
+                  <Image source={{ uri: p.selfie_uri }} style={s.faceImg} />
+                ) : (
+                  <View style={[s.faceImg, s.faceEmpty]}>
+                    <Text style={s.faceInitial}>{p.display_name?.[0] ?? "?"}</Text>
+                  </View>
+                )}
+                <Text style={s.faceName} numberOfLines={1}>{p.display_name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
+        <View style={{ paddingHorizontal: 14 }}>
+          <Btn label={t("createAccount")} onPress={() => setCreating(true)} variant="outline" />
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // ---- create account ----
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
-      {!creating && (
-        <>
-          <Card>
-            <Label>{t("logIn")}</Label>
-            <Muted style={{ marginBottom: 12 }}>{t("pickProfile")}</Muted>
-            <View style={s.grid}>
-              {existing.map((p) => (
-                <Pressable
-                  key={p.worker_id}
-                  style={s.profile}
-                  onPress={() => pick(p.worker_id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={p.display_name}
-                >
-                  {p.selfie_uri ? (
-                    <Image source={{ uri: p.selfie_uri }} style={s.avatar} />
-                  ) : (
-                    <View style={[s.avatar, s.avatarEmpty]}>
-                      <Text style={s.avatarInitial}>{p.display_name?.[0] ?? "?"}</Text>
-                    </View>
-                  )}
-                  <Text style={s.profileName} numberOfLines={1}>{p.display_name}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </Card>
-          <View style={{ paddingHorizontal: 16, gap: 8 }}>
-            <Muted style={{ textAlign: "center" }}>{t("newHere")}</Muted>
-            <BigButton label={t("createAccount")} onPress={() => setCreating(true)} tone="plain" />
+      <View style={s.head}>
+        <Text style={type.screenTitle}>{t("createTitle")}</Text>
+        <Text style={s.headSub}>{t("createSub")}</Text>
+      </View>
+
+      <Card>
+        <Field label="Name" value={name} onChangeText={setName} placeholder="Goes on every entry" style={{ marginBottom: 12 }} />
+        <Field label="Phone number" value={phone} onChangeText={(x) => setPhone(formatPhone(x))} keyboardType="phone-pad" autoCapitalize="none" placeholder="(626) - 555 - 0100" hint={t("phoneHint")} />
+      </Card>
+
+      <Card>
+        <GroupLabel>{t("roleQuestion")}</GroupLabel>
+        <View style={s.roleGrid}>
+          {[["journeyman", t("roleCrewShort")], ["site_manager", t("roleSMShort")]].map(([codeVal, label]) => {
+            const on = role === codeVal;
+            return (
+              <Pressable key={codeVal} onPress={() => setRole(codeVal)} style={[s.roleBtn, on && s.roleBtnOn]} accessibilityRole="button" accessibilityState={{ selected: on }}>
+                <Text style={[s.roleText, on && s.roleTextOn]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <GroupLabel right={t("optional")} style={{ marginTop: 16 }}>{t("usualTrade")}</GroupLabel>
+        <ChipWall options={TRADE_ORDER} value={trade} onChange={setTrade} renderLabel={(o) => o[lang] ?? o.en} show={5} />
+      </Card>
+
+      <Pressable onPress={takeSelfie} accessibilityRole="button" accessibilityLabel={t("selfieShort")}>
+        <Card style={s.selfieCard}>
+          {selfie ? (
+            <Image source={{ uri: selfie }} style={s.selfieImg} />
+          ) : (
+            <View style={s.selfieCircle}><Text style={s.selfieGlyph}>🤳</Text></View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={s.selfieTitle}>
+              {t("selfieShort")} <Text style={{ color: colors.accent }}>{t("required")}</Text>
+            </Text>
+            <Text style={s.selfieSub}>{t("selfieSub")}</Text>
+            {err ? <Text style={s.err}>{err}</Text> : null}
           </View>
-        </>
+        </Card>
+      </Pressable>
+
+      {verifying && (
+        <Card>
+          <GroupLabel>{t("enterCode")}</GroupLabel>
+          <Field label="Code" value={code} onChangeText={(x) => { setCode(x.replace(/[^0-9]/g, "").slice(0, 6)); setCodeErr(false); }} keyboardType="number-pad" autoCapitalize="none" placeholder="______" />
+          {codeErr && <Text style={s.err}>{t("codeWrong")}</Text>}
+          <View style={{ gap: 10, marginTop: 12 }}>
+            <Btn label={t("verify")} onPress={verifyCode} disabled={code.length !== 6} />
+            <Btn label={t("cancel")} onPress={() => setVerifying(false)} variant="outline" />
+          </View>
+        </Card>
       )}
 
-      {creating && (
-        <>
-          <Card>
-            <Label>{t("createAccount")}</Label>
-            <Muted style={{ marginBottom: 12 }}>{t("whoAreYouHint")}</Muted>
-            <FloatingLabelInput label={t("yourName")} value={name} onChangeText={setName} style={{ marginBottom: 10 }} />
-            <FloatingLabelInput
-              label={t("phone")}
-              value={phone}
-              onChangeText={(x) => setPhone(x.replace(/[^0-9+() -]/g, ""))}
-              keyboardType="phone-pad"
-              autoCapitalize="none"
-            />
-            <Muted style={{ marginTop: 6 }}>{t("phoneHint")}</Muted>
-
-            {/* Role decides the interface (PRD §3): site managers run the
-                daily log; crew log their own hours + photos. */}
-            <Label>{t("roleQuestion")}</Label>
-            <PickRow
-              options={[
-                { code: "site_manager", label: t("roleSM") },
-                { code: "journeyman", label: t("roleCrew") },
-              ]}
-              value={role}
-              onChange={setRole}
-              renderLabel={(o) => o.label}
-            />
-            {role && (
-              <Muted style={{ marginTop: 6 }}>
-                {role === "site_manager" ? t("roleSMHint") : t("roleCrewHint")}
-              </Muted>
-            )}
-
-            <Label>{t("yourTrade")}</Label>
-            <PickRow options={TRADES} value={trade} onChange={setTrade} renderLabel={(o) => o[lang] ?? o.en} />
-          </Card>
-
-          <Card>
-            <Label>{t("profileSelfie")}</Label>
-            {selfie ? (
-              <View style={s.selfieRow}>
-                <Image source={{ uri: selfie }} style={s.selfieBig} />
-                <BigButton label={t("retakeSelfie")} onPress={takeSelfie} tone="plain" style={{ flex: 1 }} />
-              </View>
-            ) : (
-              <BigButton label={`🤳  ${t("takeSelfie")}`} onPress={takeSelfie} />
-            )}
-            <Muted style={{ marginTop: 10 }}>{t("selfieWhy")}</Muted>
-            {err && <Text style={s.err}>{err}</Text>}
-          </Card>
-
-          {verifying && (
-            <Card>
-              <Label>{t("enterCode")}</Label>
-              <FloatingLabelInput
-                label="______"
-                value={code}
-                onChangeText={(x) => {
-                  setCode(x.replace(/[^0-9]/g, "").slice(0, 6));
-                  setCodeErr(false);
-                }}
-                keyboardType="number-pad"
-                autoCapitalize="none"
-              />
-              {codeErr && <Text style={s.err}>{t("codeWrong")}</Text>}
-              <View style={{ gap: 10, marginTop: 12 }}>
-                <BigButton label={t("verify")} onPress={verifyCode} disabled={code.length !== 6} />
-                <BigButton label={t("cancel")} onPress={() => setVerifying(false)} tone="plain" />
-              </View>
-            </Card>
-          )}
-
-          {!verifying && (
-            <View style={{ paddingHorizontal: 16, gap: 10 }}>
-              <BigButton
-                label={REQUIRE_PHONE_VERIFICATION ? t("sendCode") : t("start")}
-                onPress={create}
-                disabled={
-                  !name.trim() || !selfie || !role ||
-                  (REQUIRE_PHONE_VERIFICATION && !phone.trim())
-                }
-              />
-              {existing.length > 0 && (
-                <BigButton label={t("logIn")} onPress={() => setCreating(false)} tone="plain" />
-              )}
-            </View>
-          )}
-        </>
+      {!verifying && (
+        <View style={{ paddingHorizontal: 14, gap: 10 }}>
+          <Btn label={REQUIRE_PHONE_VERIFICATION ? t("sendCode") : t("start")} onPress={create} disabled={!role || !name.trim()} />
+          {existing.length > 0 && <Btn label={t("logIn")} onPress={() => setCreating(false)} variant="outline" />}
+        </View>
       )}
     </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 14 },
-  profile: { alignItems: "center", width: 86 },
-  avatar: { width: 74, height: 74, borderRadius: 37, backgroundColor: "#eee" },
-  avatarEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTint },
-  avatarInitial: { color: colors.brand, fontSize: 28, fontWeight: "800" },
-  profileName: { color: colors.text, fontSize: 13.5, fontWeight: "700", marginTop: 6 },
-  selfieRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  selfieBig: { width: 96, height: 96, borderRadius: 48, backgroundColor: "#eee" },
-  err: { color: colors.red, marginTop: 8, fontSize: 13.5 },
+  head: { paddingHorizontal: 14, marginTop: 4, marginBottom: 8 },
+  headSub: { fontFamily: fonts.body, fontSize: 14, color: colors.textMuted, marginTop: 4 },
+
+  roleGrid: { flexDirection: "row", gap: 8 },
+  roleBtn: { flex: 1, minHeight: 50, borderRadius: 8, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" },
+  roleBtnOn: { backgroundColor: colors.ink, borderColor: colors.ink },
+  roleText: { fontFamily: fonts.body, fontSize: 15, fontWeight: "500", color: colors.text },
+  roleTextOn: { color: colors.onInk, fontWeight: "700" },
+
+  selfieCard: { flexDirection: "row", alignItems: "center", gap: 12 },
+  selfieCircle: { width: 56, height: 56, borderRadius: 28, borderWidth: 1, borderStyle: "dashed", borderColor: colors.borderDashed, alignItems: "center", justifyContent: "center" },
+  selfieImg: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.surfaceSunken },
+  selfieGlyph: { fontSize: 22 },
+  selfieTitle: { fontFamily: fonts.body, fontSize: 15, fontWeight: "700", color: colors.text },
+  selfieSub: { fontFamily: fonts.body, fontSize: 12.5, color: colors.textMuted, marginTop: 3, lineHeight: 17 },
+  err: { fontFamily: fonts.body, color: colors.red, marginTop: 8, fontSize: 13 },
+
+  faces: { flexDirection: "row", flexWrap: "wrap", gap: 14 },
+  face: { alignItems: "center", width: 86 },
+  faceImg: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.surfaceSunken },
+  faceEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.ink },
+  faceInitial: { fontFamily: fonts.mono, color: colors.onInk, fontSize: 26, fontWeight: "700" },
+  faceName: { fontFamily: fonts.body, color: colors.text, fontSize: 13.5, fontWeight: "700", marginTop: 6 },
 });

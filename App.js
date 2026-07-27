@@ -14,14 +14,18 @@ import AuthScreen from "./src/screens/AuthScreen";
 import AddItemScreen from "./src/screens/AddItemScreen";
 import AddLaborScreen from "./src/screens/AddLaborScreen";
 import AddPhotoScreen from "./src/screens/AddPhotoScreen";
+import AddProjectScreen from "./src/screens/AddProjectScreen";
+import JoinListScreen from "./src/screens/JoinListScreen";
 import ChangeOrdersScreen from "./src/screens/ChangeOrdersScreen";
 import ReviewScreen from "./src/screens/ReviewScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import TodayScreen from "./src/screens/TodayScreen";
-import { colors } from "./src/theme";
+import { colors, ensureFontsWeb, fonts, type } from "./src/theme";
 
 // Hold the native splash until the animated overlay is on screen.
 SplashScreen.preventAutoHideAsync().catch(() => {});
+// Keypoint type system — inject Google Fonts on web (native uses expo-font).
+ensureFontsWeb();
 
 // Worker avatar with a dead-image fallback: old profiles may hold a blob: URI
 // that didn't survive a reload — show their initial rather than a gray dot.
@@ -73,6 +77,8 @@ const TITLES = {
   review: "review",
   cos: "changeOrders",
   settings: "settings",
+  addproject: "addProjectTitle",
+  joinlist: "joinListTitle",
 };
 
 export default function App() {
@@ -154,10 +160,10 @@ export default function App() {
     <SafeAreaView style={s.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.bg} />
       <View style={s.shell}>
-        <View style={s.header}>
+        <View style={[s.header, !showLogoHeader && s.headerRule]}>
           {!showLogoHeader ? (
             <>
-              <Pressable onPress={done} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back">
+              <Pressable onPress={done} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back" style={s.backHit}>
                 <Text style={s.back}>‹</Text>
               </Pressable>
               <Text style={s.title}>{t(TITLES[screen])}</Text>
@@ -233,6 +239,8 @@ export default function App() {
         {authed && screen === "photo" && <AddPhotoScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
         {authed && screen === "review" && <ReviewScreen t={t} workDate={workDate} onDone={done} />}
         {authed && screen === "cos" && <ChangeOrdersScreen t={t} workDate={workDate} onDone={done} />}
+        {authed && screen === "addproject" && <AddProjectScreen t={t} onDone={done} />}
+        {authed && screen === "joinlist" && <JoinListScreen t={t} onDone={done} />}
         {authed && screen === "settings" && (
           <SettingsScreen
             t={t}
@@ -269,10 +277,11 @@ const s = StyleSheet.create({
     paddingTop: Platform.OS === "android" ? 40 : 14,
     paddingBottom: 10,
   },
-  mark: { color: colors.brand, fontSize: 20 },
-  avatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: "#eee" },
-  avatarEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTint },
-  avatarInitial: { color: colors.brand, fontSize: 15, fontWeight: "800" },
+  headerRule: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  mark: { color: colors.accent, fontSize: 20 },
+  avatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.surfaceSunken },
+  avatarEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.ink },
+  avatarInitial: { fontFamily: fonts.mono, color: colors.onInk, fontSize: 12, fontWeight: "700" },
   headerCenter: {
     position: "absolute",
     left: 0,
@@ -293,9 +302,10 @@ const s = StyleSheet.create({
   },
   langBtn: { paddingVertical: 4, paddingHorizontal: 9 },
   langOn: { backgroundColor: colors.ink },
-  langText: { color: colors.textSecondary, fontSize: 11.5, fontWeight: "800" },
-  langTextOn: { color: "#fff" },
+  langText: { fontFamily: fonts.mono, color: colors.textSecondary, fontSize: 11, fontWeight: "700" },
+  langTextOn: { color: colors.onInk },
+  backHit: { width: 26, alignItems: "flex-start" },
   back: { color: colors.text, fontSize: 30, fontWeight: "700", lineHeight: 30 },
-  title: { color: colors.text, fontSize: 16, fontWeight: "800", textTransform: "capitalize" },
-  gear: { color: colors.textSecondary, fontSize: 20 },
+  title: { ...type.navTitle },
+  gear: { color: colors.textMuted, fontSize: 20 },
 });
