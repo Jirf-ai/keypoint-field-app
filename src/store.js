@@ -25,6 +25,10 @@ const EMPTY = {
   // language, selfie. active_worker_id gates the app — no profile, no capture.
   profiles: [],
   active_worker_id: null,
+  // GC team account on this device (business registered + consented; the
+  // standing team code workers must use to register). Locked server-side to
+  // gc_accounts — this is the local session copy.
+  gc_account: null,   // { gc_account_id, gc_code, business_name, phone, email }
   // Multi-project (Jeffrey 2026-07-24): the worker picks their project from
   // Records; everything below partitions by current_project.id (Records uuid).
   current_project: null,      // { id, name, status }
@@ -207,7 +211,7 @@ export async function saveSettings(patch) {
 }
 
 // ------------------------------------------------------------------ profiles
-export async function createProfile({ display_name, default_trade, lang, selfie_uri, phone, role }) {
+export async function createProfile({ display_name, default_trade, lang, selfie_uri, phone, role, gc }) {
   const p = {
     worker_id: uuid(),
     display_name,
@@ -219,11 +223,28 @@ export async function createProfile({ display_name, default_trade, lang, selfie_
     // schema §4.8 role — drives which interface the worker gets (site
     // managers run the daily log; crew log their own hours + photos).
     role: role ?? "journeyman",
+    // Team linkage: workers register under a GC's standing code — the GC's
+    // consent is what makes their crew's capture legitimate.
+    gc_account_id: gc?.gc_account_id ?? null,
+    gc_code: gc?.gc_code ?? null,
+    gc_business: gc?.business_name ?? null,
     active: true,
     created_at: new Date().toISOString(),
   };
   state.profiles.push(p);
   return await logIn(p.worker_id);
+}
+
+// GC session — set after gc-account register/login; cleared never (the code
+// is standing and the GC finds it in their profile).
+export async function setGcAccount(acct) {
+  state.gc_account = acct;
+  await persist();
+  return acct;
+}
+
+export function gcAccount() {
+  return state?.gc_account ?? null;
 }
 
 export async function logIn(worker_id) {

@@ -1,11 +1,13 @@
 // Settings — the worker's name (provenance on every entry) and the read-only
 // project record. Name is inline-editable (no separate Save); the project record
-// is set in mono so it reads as "not editable" (§SettingsScreen).
+// is set in mono so it reads as "not editable" (§SettingsScreen). A GC account
+// on this device also finds its standing team code here (locked to the
+// account; copy to hand to the crew — workers can't register without it).
 import { useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Btn, Card, Field, StackedFooter } from "../components/ui";
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Btn, Card, Field, GroupLabel, Muted, StackedFooter } from "../components/ui";
 import { PROJECT } from "../schema";
-import { activeProfile, getSettings, saveSettings } from "../store";
+import { activeProfile, gcAccount, getSettings, saveSettings } from "../store";
 import { colors, fonts, type } from "../theme";
 
 const SPEC = [
@@ -20,10 +22,25 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
   const st = getSettings();
   const [name, setName] = useState(st.recorded_by || me?.display_name || "");
   const [editing, setEditing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const gc = gcAccount();
 
   function changeName(x) {
     setName(x);
     saveSettings({ recorded_by: x.trim() });
+  }
+
+  async function copyCode(code) {
+    try {
+      if (Platform.OS === "web" && navigator?.clipboard) {
+        await navigator.clipboard.writeText(code);
+      } else {
+        const Clipboard = require("react-native").Clipboard;
+        Clipboard?.setString?.(code);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch { /* code stays visible + selectable */ }
   }
 
   return (
@@ -50,6 +67,30 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
             </View>
           )}
         </Card>
+
+        {/* GC team code — standing, locked to the registered company account
+            (Jeffrey 2026-07-27). The GC copies it here and hands it to
+            workers; without it a worker cannot register. */}
+        {gc && (
+          <Card>
+            <GroupLabel>{t("gcCodeTitle")}</GroupLabel>
+            <Text style={s.gcBiz}>{gc.business_name}</Text>
+            <Text selectable style={s.codeBig}>{gc.gc_code}</Text>
+            <Muted style={{ marginTop: 8 }}>{t("gcCodeHint")}</Muted>
+            <View style={{ marginTop: 10 }}>
+              <Btn label={copied ? t("copiedCode") : `⧉  ${t("copyCode")}`} onPress={() => copyCode(gc.gc_code)} variant="outline" />
+            </View>
+          </Card>
+        )}
+
+        {/* A worker linked to a GC sees which company signed them in. */}
+        {!gc && me?.gc_business && (
+          <Card>
+            <GroupLabel>{t("yourCompany")}</GroupLabel>
+            <Text style={s.gcBiz}>{me.gc_business}</Text>
+            <Muted>{t("teamCode")}: {me.gc_code}</Muted>
+          </Card>
+        )}
 
         {/* read-only project record */}
         <Card>
@@ -86,6 +127,14 @@ const s = StyleSheet.create({
   idLabel: { fontFamily: fonts.mono, fontSize: 9.5, fontWeight: "600", letterSpacing: 1.33, textTransform: "uppercase", color: colors.label },
   idName: { fontFamily: fonts.body, fontSize: 17, fontWeight: "700", color: colors.text, marginTop: 2 },
   edit: { fontFamily: fonts.body, fontSize: 14, fontWeight: "700", color: colors.accent },
+
+  gcBiz: { fontFamily: fonts.body, fontSize: 15.5, fontWeight: "700", color: colors.text, marginTop: 4, marginBottom: 8 },
+  codeBig: {
+    fontFamily: fonts.mono, color: colors.accent, fontSize: 28, fontWeight: "700",
+    letterSpacing: 2, textAlign: "center", paddingVertical: 10,
+    borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 10,
+    backgroundColor: colors.surfaceSunken, overflow: "hidden",
+  },
 
   recHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   recRO: { fontFamily: fonts.mono, fontSize: 9.5, fontWeight: "600", letterSpacing: 0.8, textTransform: "uppercase", color: colors.label },

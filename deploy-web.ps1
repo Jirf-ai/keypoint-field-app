@@ -13,6 +13,11 @@ $ErrorActionPreference = "Stop"
 $proj = "bbkeogzyqwszmijmvlmj"
 $dist = Join-Path $PSScriptRoot "dist"
 
+# expo export rewrites dist/ from scratch — re-apply the PWA patches
+# (relative paths, home-screen meta, sw.js offline shell) every deploy.
+$env:Path = "C:\Program Files\nodejs;" + $env:Path
+node (Join-Path $PSScriptRoot "scripts\patch-dist.js")
+
 $tok = (Get-Content "C:\Users\Jeffrey\.claude\secrets\supabase-deploy-token" -Raw).Trim()
 $keys = Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/$proj/api-keys" -Headers @{ Authorization = "Bearer $tok" }
 $svc = ($keys | Where-Object name -eq "service_role").api_key

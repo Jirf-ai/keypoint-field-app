@@ -2,12 +2,21 @@
 // profile (name + selfie + role + usual trade); returning workers tap their
 // face. Keypoint system: title on the cream ground, labelled fields, role as a
 // 2-up grid, trade as a collapsing chip wall, selfie as a framed prompt.
+//
+// Two codes, two jobs (2026-07-27):
+//   - GC TEAM CODE (server, gc_accounts): the company's standing code. NO
+//     worker of any role can register without one — the GC's registration +
+//     data-sharing consent is what makes the crew's capture legitimate.
+//   - Site-manager SHARE CODE (local, team projects): crew additionally join
+//     their manager's project list at signup (can't record against a project
+//     no manager owns).
 import { useState } from "react";
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Btn, Card, ChipWall, Field, GroupLabel, Muted, preferred } from "../components/ui";
+import { call } from "../api";
 import { REQUIRE_PHONE_VERIFICATION, TRADES } from "../schema";
-import { createProfile, joinByCode, logIn, profiles, resolveShareCode } from "../store";
+import { createProfile, gcAccount, joinByCode, logIn, profiles, resolveShareCode, setGcAccount } from "../store";
 import { colors, fonts, type } from "../theme";
 
 const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
@@ -34,9 +43,27 @@ export default function AuthScreen({ t, lang, onDone }) {
   const [mgrCodeErr, setMgrCodeErr] = useState(false);
   const isCrew = role === "journeyman";
   const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [code, setCode] = useState("");
   const [codeErr, setCodeErr] = useState(false);
+  const [pendingGc, setPendingGc] = useState(null);
+
+  // GC team code gate: required for every new profile; a GC session on this
+  // device pre-fills its own code.
+  const gc = gcAccount();
+  const [teamCode, setTeamCode] = useState(gc?.gc_code ?? "");
+  const [codeState, setCodeState] = useState(null); // null | 'invalid' | 'offline'
+
+  // GC panel: null | 'register' | 'login' | 'code' (code = show team code)
+  const [gcMode, setGcMode] = useState(null);
+  const [gcBiz, setGcBiz] = useState("");
+  const [gcContact, setGcContact] = useState("");
+  const [gcPhone, setGcPhone] = useState("");
+  const [gcEmail, setGcEmail] = useState("");
+  const [gcConsent, setGcConsent] = useState(false);
+  const [gcErr, setGcErr] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   function assetToUri(asset) {
     if (asset.base64) return `data:image/jpeg;base64,${asset.base64}`;
@@ -77,7 +104,7 @@ export default function AuthScreen({ t, lang, onDone }) {
     }
   }
 
-  async function finishCreate() {
+  async function finishCreate(gcInfo) {
     const p = await createProfile({
       display_name: name.trim(),
       default_trade: trade,
@@ -85,14 +112,50 @@ export default function AuthScreen({ t, lang, onDone }) {
       selfie_uri: await ensureDurable(selfie),
       phone: phone.replace(/\D/g, "") || null,
       role,
+      gc: gcInfo,
     });
     // Crew join their manager's project list right after the profile exists.
     if (isCrew && mgrCode.trim()) await joinByCode(mgrCode);
+    // Record the worker under the GC server-side (idempotent upsert on
+    // worker_id — a reinstall re-registering is harmless). Fire-and-forget:
+    // the code was already validated online a moment ago.
+    if (gcInfo?.gc_code) {
+      call("gc-account", {
+        action: "verify",
+        gc_code: gcInfo.gc_code,
+        worker: {
+          worker_id: p.worker_id,
+          display_name: p.display_name,
+          phone: p.phone,
+          role: p.role,
+          trade: p.default_trade,
+        },
+      }).catch(() => {});
+    }
     onDone(p);
   }
 
+  // No code, no account: the GC's registration (and consent) is what makes
+  // the crew's capture legitimate — validated server-side, online required.
+  async function validateTeamCode() {
+    const codeInput = teamCode.trim().toUpperCase();
+    if (gc && codeInput === gc.gc_code) {
+      return { gc_account_id: gc.gc_account_id, gc_code: gc.gc_code, business_name: gc.business_name };
+    }
+    let r;
+    try {
+      r = await call("gc-account", { action: "verify", gc_code: codeInput });
+    } catch {
+      setCodeState("offline");
+      return null;
+    }
+    if (!r || (!r.valid && r.status >= 500)) { setCodeState("offline"); return null; }
+    if (!r.valid) { setCodeState("invalid"); return null; }
+    return { gc_account_id: r.gc_account_id, gc_code: codeInput, business_name: r.business_name };
+  }
+
   async function create() {
-    if (!name.trim() || !role) return;
+    if (!name.trim() || !role || !teamCode.trim()) return;
     // Crew need a valid site-manager code before an account is created.
     if (isCrew) {
       if (!resolveShareCode(mgrCode)) {
@@ -100,12 +163,18 @@ export default function AuthScreen({ t, lang, onDone }) {
         return;
       }
     }
+    setBusy(true);
+    setCodeState(null);
+    const gcInfo = await validateTeamCode();
+    setBusy(false);
+    if (!gcInfo) return;
     if (REQUIRE_PHONE_VERIFICATION) {
       if (!phone.trim()) return;
+      setPendingGc(gcInfo);
       setVerifying(true);
       return;
     }
-    await finishCreate();
+    await finishCreate(gcInfo);
   }
 
   async function verifyCode() {
@@ -113,12 +182,143 @@ export default function AuthScreen({ t, lang, onDone }) {
       setCodeErr(true);
       return;
     }
-    await finishCreate();
+    await finishCreate(pendingGc);
   }
 
   async function pick(worker_id) {
     const p = await logIn(worker_id);
     if (p) onDone(p);
+  }
+
+  // ---------------------------------------------------------------- GC panel
+  async function gcRegister() {
+    if (!gcBiz.trim() || !gcPhone.trim() || !gcEmail.trim() || !gcConsent) return;
+    setBusy(true);
+    setGcErr(null);
+    let r;
+    try {
+      r = await call("gc-account", {
+        action: "register",
+        business_name: gcBiz.trim(),
+        contact_name: gcContact.trim() || null,
+        phone: gcPhone.trim(),
+        email: gcEmail.trim(),
+        consent: true,
+      });
+    } catch { r = null; }
+    setBusy(false);
+    if (!r?.ok) { setGcErr(r?.error ? t("gcNotFound") : t("needOnline")); return; }
+    await setGcAccount({
+      gc_account_id: r.gc_account_id, gc_code: r.gc_code,
+      business_name: r.business_name, phone: gcPhone.trim(), email: gcEmail.trim(),
+    });
+    setTeamCode(r.gc_code);
+    setGcMode("code");
+  }
+
+  async function gcLogin() {
+    setBusy(true);
+    setGcErr(null);
+    let r;
+    try {
+      r = await call("gc-account", { action: "login", gc_code: teamCode.trim().toUpperCase(), phone: gcPhone.trim() });
+    } catch { r = null; }
+    setBusy(false);
+    if (!r?.ok) { setGcErr(r?.status === 404 ? t("gcNotFound") : t("needOnline")); return; }
+    await setGcAccount({
+      gc_account_id: r.gc_account_id, gc_code: r.gc_code,
+      business_name: r.business_name, phone: r.phone, email: r.email,
+    });
+    setTeamCode(r.gc_code);
+    setGcMode("code");
+  }
+
+  async function copyCode(codeStr) {
+    try {
+      if (Platform.OS === "web" && navigator?.clipboard) {
+        await navigator.clipboard.writeText(codeStr);
+      } else {
+        const Clipboard = require("react-native").Clipboard;
+        Clipboard?.setString?.(codeStr);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch { /* code stays visible + selectable */ }
+  }
+
+  // ---- GC: register the company ----
+  if (gcMode === "register") {
+    return (
+      <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
+        <View style={s.head}>
+          <Text style={type.screenTitle}>{t("gcTitle")}</Text>
+          <Text style={s.headSub}>{t("gcIntro")}</Text>
+        </View>
+        <Card>
+          <Field label={t("businessName")} value={gcBiz} onChangeText={setGcBiz} style={{ marginBottom: 12 }} />
+          <Field label={t("contactName")} value={gcContact} onChangeText={setGcContact} style={{ marginBottom: 12 }} />
+          <Field label={t("gcPhone")} value={gcPhone} onChangeText={(x) => setGcPhone(formatPhone(x))} keyboardType="phone-pad" autoCapitalize="none" placeholder="(626) - 555 - 0100" style={{ marginBottom: 12 }} />
+          <Field label={t("gcEmail")} value={gcEmail} onChangeText={setGcEmail} autoCapitalize="none" keyboardType="email-address" />
+        </Card>
+        <Card>
+          <GroupLabel>{t("gcConsentTitle")}</GroupLabel>
+          <Muted style={{ marginBottom: 12 }}>{t("gcConsentText")}</Muted>
+          <Pressable style={s.consentRow} onPress={() => setGcConsent(!gcConsent)} accessibilityRole="checkbox" accessibilityState={{ checked: gcConsent }}>
+            <View style={[s.checkbox, gcConsent && s.checkboxOn]}>
+              {gcConsent && <Text style={s.checkmark}>✓</Text>}
+            </View>
+            <Text style={s.consentLabel}>{t("gcConsentCheck")}</Text>
+          </Pressable>
+          {gcErr && <Text style={s.err}>{gcErr}</Text>}
+        </Card>
+        <View style={{ paddingHorizontal: 14, gap: 10 }}>
+          <Btn label={t("gcRegister")} onPress={gcRegister} disabled={busy || !gcBiz.trim() || !gcPhone.trim() || !gcEmail.trim() || !gcConsent} />
+          <Btn label={t("gcLoginTab")} onPress={() => { setGcErr(null); setGcMode("login"); }} variant="outline" />
+          <Btn label={t("cancel")} onPress={() => { setGcErr(null); setGcMode(null); }} variant="outline" />
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // ---- GC: log back in (code + business phone) ----
+  if (gcMode === "login") {
+    return (
+      <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
+        <View style={s.head}>
+          <Text style={type.screenTitle}>{t("gcLoginTab")}</Text>
+          <Text style={s.headSub}>{t("gcLoginHint")}</Text>
+        </View>
+        <Card>
+          <Field label={t("teamCode")} value={teamCode} onChangeText={(x) => setTeamCode(x.toUpperCase())} autoCapitalize="characters" placeholder="LOR-7XK4" style={{ marginBottom: 12 }} />
+          <Field label={t("gcPhone")} value={gcPhone} onChangeText={(x) => setGcPhone(formatPhone(x))} keyboardType="phone-pad" autoCapitalize="none" />
+          {gcErr && <Text style={s.err}>{gcErr}</Text>}
+        </Card>
+        <View style={{ paddingHorizontal: 14, gap: 10 }}>
+          <Btn label={t("logIn")} onPress={gcLogin} disabled={busy || !teamCode.trim() || !gcPhone.trim()} />
+          <Btn label={t("cancel")} onPress={() => { setGcErr(null); setGcMode(null); }} variant="outline" />
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // ---- GC: the standing team code ----
+  if (gcMode === "code" && gc) {
+    return (
+      <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
+        <View style={s.head}>
+          <Text style={type.screenTitle}>{t("gcCodeTitle")}</Text>
+          <Text style={s.headSub}>{gc.business_name}</Text>
+        </View>
+        <Card>
+          <Text selectable style={s.codeBig}>{gc.gc_code}</Text>
+          <Muted style={{ marginTop: 8 }}>{t("gcCodeHint")}</Muted>
+        </Card>
+        <View style={{ paddingHorizontal: 14, gap: 10 }}>
+          <Btn label={copied ? t("copiedCode") : `⧉  ${t("copyCode")}`} onPress={() => copyCode(gc.gc_code)} />
+          <Btn label={t("gcContinueProfile")} onPress={() => { setTeamCode(gc.gc_code); setGcMode(null); setCreating(true); }} variant="outline" />
+        </View>
+      </ScrollView>
+    );
   }
 
   // ---- returning worker: pick a face ----
@@ -145,8 +345,9 @@ export default function AuthScreen({ t, lang, onDone }) {
             ))}
           </View>
         </Card>
-        <View style={{ paddingHorizontal: 14 }}>
+        <View style={{ paddingHorizontal: 14, gap: 10 }}>
           <Btn label={t("createAccount")} onPress={() => setCreating(true)} variant="outline" />
+          <Btn label={`🏗  ${t("gcEntry")}`} onPress={() => setGcMode(gc ? "code" : "register")} variant="outline" />
         </View>
       </ScrollView>
     );
@@ -162,7 +363,20 @@ export default function AuthScreen({ t, lang, onDone }) {
 
       <Card>
         <Field label="Name" value={name} onChangeText={setName} placeholder="Goes on every entry" style={{ marginBottom: 12 }} />
-        <Field label="Phone number" value={phone} onChangeText={(x) => setPhone(formatPhone(x))} keyboardType="phone-pad" autoCapitalize="none" placeholder="(626) - 555 - 0100" hint={t("phoneHint")} />
+        <Field label="Phone number" value={phone} onChangeText={(x) => setPhone(formatPhone(x))} keyboardType="phone-pad" autoCapitalize="none" placeholder="(626) - 555 - 0100" hint={t("phoneHint")} style={{ marginBottom: 12 }} />
+        {/* No GC code, no account (Jeffrey 2026-07-27): every worker registers
+            under their company's standing team code — the GC's consent is
+            what makes the crew's capture legitimate. Validated online. */}
+        <Field
+          label={t("teamCode")}
+          value={teamCode}
+          onChangeText={(x) => { setTeamCode(x.toUpperCase()); setCodeState(null); }}
+          autoCapitalize="characters"
+          placeholder="LOR-7XK4"
+          hint={gc && teamCode.trim().toUpperCase() === gc.gc_code ? `✓ ${gc.business_name}` : t("teamCodeHint")}
+        />
+        {codeState === "invalid" && <Text style={s.err}>{t("teamCodeInvalid")}</Text>}
+        {codeState === "offline" && <Text style={s.err}>{t("needOnline")}</Text>}
       </Card>
 
       <Card>
@@ -226,8 +440,13 @@ export default function AuthScreen({ t, lang, onDone }) {
 
       {!verifying && (
         <View style={{ paddingHorizontal: 14, gap: 10 }}>
-          <Btn label={REQUIRE_PHONE_VERIFICATION ? t("sendCode") : t("start")} onPress={create} disabled={!role || !name.trim() || (isCrew && mgrCode.trim().length < 4)} />
+          <Btn
+            label={REQUIRE_PHONE_VERIFICATION ? t("sendCode") : t("start")}
+            onPress={create}
+            disabled={busy || !role || !name.trim() || !teamCode.trim() || (isCrew && mgrCode.trim().length < 4)}
+          />
           {existing.length > 0 && <Btn label={t("logIn")} onPress={() => setCreating(false)} variant="outline" />}
+          <Btn label={`🏗  ${t("gcEntry")}`} onPress={() => setGcMode(gc ? "code" : "register")} variant="outline" />
         </View>
       )}
     </ScrollView>
@@ -258,4 +477,17 @@ const s = StyleSheet.create({
   faceEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.ink },
   faceInitial: { fontFamily: fonts.mono, color: colors.onInk, fontSize: 26, fontWeight: "700" },
   faceName: { fontFamily: fonts.body, color: colors.text, fontSize: 13.5, fontWeight: "700", marginTop: 6 },
+
+  consentRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 4 },
+  checkbox: { width: 26, height: 26, borderRadius: 6, borderWidth: 2, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  checkboxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  checkmark: { color: colors.onInk, fontSize: 16, fontWeight: "800" },
+  consentLabel: { fontFamily: fonts.body, color: colors.text, fontSize: 14.5, fontWeight: "700", flex: 1 },
+
+  codeBig: {
+    fontFamily: fonts.mono, color: colors.accent, fontSize: 32, fontWeight: "700",
+    letterSpacing: 2, textAlign: "center", paddingVertical: 12,
+    borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 10,
+    backgroundColor: colors.surfaceSunken, overflow: "hidden",
+  },
 });
