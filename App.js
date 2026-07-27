@@ -171,25 +171,19 @@ export default function App() {
             </>
           ) : (
             <>
-              {/* True centering: the logo sits in an absolute overlay so the
-                  avatar/lang cluster widths can't push it off-center. */}
-              <View pointerEvents="none" style={s.headerCenter}>
-                <View
-                  ref={logoSlotRef}
-                  collapsable={false}
-                  style={{ opacity: splashDone ? 1 : 0 }}
-                >
+              {/* Logo sits in the normal flex flow (left), so it can never
+                  collide with the language/gear cluster on narrow phones.
+                  Worker avatar (their selfie) taps through to settings. */}
+              <View style={s.headerLeft}>
+                {authed && (
+                  <Pressable onPress={() => setScreen("settings")} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("settings")}>
+                    <ProfileAvatar profile={profile} />
+                  </Pressable>
+                )}
+                <View ref={logoSlotRef} collapsable={false} style={{ opacity: splashDone ? 1 : 0, flexShrink: 1 }}>
                   <LogoRow />
                 </View>
               </View>
-              {/* Worker avatar (their selfie) — tap for settings/switch. */}
-              {authed ? (
-                <Pressable onPress={() => setScreen("settings")} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("settings")}>
-                  <ProfileAvatar profile={profile} />
-                </Pressable>
-              ) : (
-                <View style={{ width: 26 }} />
-              )}
               <View style={s.headerRight}>
                 <LangToggle lang={lang} onLang={changeLang} />
                 {authed && (
@@ -282,17 +276,8 @@ const s = StyleSheet.create({
   avatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.surfaceSunken },
   avatarEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.ink },
   avatarInitial: { fontFamily: fonts.mono, color: colors.onInk, fontSize: 12, fontWeight: "700" },
-  headerCenter: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    alignItems: "center",
-    justifyContent: "flex-end",
-    paddingBottom: 10,
-  },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 9, flexShrink: 1, minWidth: 0 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 0 },
   langWrap: {
     flexDirection: "row",
     borderWidth: 1,

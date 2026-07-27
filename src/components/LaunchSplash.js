@@ -30,7 +30,7 @@ export function LogoRow({ gemTransform }) {
           <View style={l.gemShape} />
         </Animated.View>
       </View>
-      <Text style={l.wordmark}>Keypoint Field</Text>
+      <Text style={l.wordmark} numberOfLines={1}>Keypoint Field</Text>
       {/* brand lockup renders as mono caps via style textTransform */}
     </View>
   );
