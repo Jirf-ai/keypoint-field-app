@@ -12,6 +12,10 @@ import { colors, fonts } from "../theme";
 const TURN_MS = 1350;
 const DOCK_MS = 680;
 const MIN_SPLASH_MS = 1600;
+// Hard cap: on RN-web `measureInWindow` can silently never report the header
+// dock slot, which would leave the splash logo hanging centered over the page
+// forever. Past this point we finish the splash no matter what.
+const MAX_SPLASH_MS = 2800;
 const SPLASH_SCALE = 1.5;
 
 const spinEase = Easing.bezier(0.5, 0.08, 0.35, 0.92);
@@ -49,7 +53,9 @@ export default function LaunchSplash({ dock, onDone }) {
     if (docking.current) return;
     docking.current = true;
     setRevealed(true);
-    if (live.current.reduced) {
+    // No dock target measured (or reduced motion): finish instantly — the
+    // static header logo takes over rather than gliding to nowhere.
+    if (live.current.reduced || !live.current.dock) {
       prog.setValue(1);
       live.current.onDone?.();
       return;
@@ -85,8 +91,15 @@ export default function LaunchSplash({ dock, onDone }) {
       minHoldDone.current = true;
       tryDock();
     }, MIN_SPLASH_MS);
+    // Safety net so the splash can never hang if the dock slot never measures.
+    const hardStop = setTimeout(() => {
+      if (!docking.current) startDock();
+    }, MAX_SPLASH_MS);
     spinOnce();
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(hardStop);
+    };
   }, []);
 
   useEffect(() => {
