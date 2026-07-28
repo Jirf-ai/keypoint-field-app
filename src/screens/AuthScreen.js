@@ -360,7 +360,7 @@ export default function AuthScreen({ t, lang, onDone }) {
 
       <Card>
         <Field label={t("nameLabel")} value={name} onChangeText={setName} placeholder={t("nameHint")} style={{ marginBottom: 12 }} />
-        <Field label="Phone number" value={phone} onChangeText={(x) => setPhone(formatPhone(x))} keyboardType="phone-pad" autoCapitalize="none" placeholder="(626) - 555 - 0100" hint={t("phoneHint")} style={{ marginBottom: 12 }} />
+        <Field label={t("phone")} value={phone} onChangeText={(x) => setPhone(formatPhone(x))} keyboardType="phone-pad" autoCapitalize="none" placeholder="(626) - 555 - 0100" hint={t("phoneHint")} style={{ marginBottom: 12 }} />
         {/* No GC code, no account (Jeffrey 2026-07-27): every worker registers
             under their company's standing team code — the GC's consent is
             what makes the crew's capture legitimate. Validated online. */}

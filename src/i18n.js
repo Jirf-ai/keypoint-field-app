@@ -50,8 +50,12 @@ export const STRINGS = {
     paperTrail: "Paper trail",
     recentLabel: "recent",
     statLines: "Lines",
+    statLine: "Line",
     statHours: "Hours",
     statPhotos: "Photos",
+    statPhoto: "Photo",
+    chipAll: "All",
+    chipLess: "Show less",
     myHours: "My hours",
     thisWeek: "This week",
     noHoursWeek: "No hours logged this week yet.",
@@ -296,8 +300,12 @@ export const STRINGS = {
     paperTrail: "Documentación",
     recentLabel: "reciente",
     statLines: "Líneas",
+    statLine: "Línea",
     statHours: "Horas",
     statPhotos: "Fotos",
+    statPhoto: "Foto",
+    chipAll: "Todas",
+    chipLess: "Ver menos",
     myHours: "Mis horas",
     thisWeek: "Esta semana",
     noHoursWeek: "Aún no hay horas registradas esta semana.",
@@ -541,8 +549,12 @@ export const STRINGS = {
     paperTrail: "凭证记录",
     recentLabel: "最近",
     statLines: "记录",
+    statLine: "记录",
     statHours: "工时",
     statPhotos: "照片",
+    statPhoto: "照片",
+    chipAll: "全部",
+    chipLess: "收起",
     myHours: "我的工时",
     thisWeek: "本周",
     noHoursWeek: "本周还没有记录工时。",
@@ -768,9 +780,21 @@ export const PHASE_LABELS = {
   gazebo: { en: "Gazebo", es: "Gazebo", zh: "凉亭" },
 };
 
+// Tracks the language of the most recent makeT() so shared UI primitives that
+// render outside a screen's `t` scope (e.g. the ChipWall expander) can localize
+// without every call site threading `t`. App calls makeT(lang) at the root on
+// every render, so this is always current before any child renders.
+let _activeLang = "en";
+
 export function makeT(lang) {
+  _activeLang = lang;
   const d = STRINGS[lang] ?? STRINGS.en;
   return (key) => d[key] ?? STRINGS.en[key] ?? key;
+}
+
+export function tr(key) {
+  const d = STRINGS[_activeLang] ?? STRINGS.en;
+  return d[key] ?? STRINGS.en[key] ?? key;
 }
 
 export function phaseLabel(code, lang) {

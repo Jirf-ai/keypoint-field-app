@@ -4,6 +4,7 @@
 // everything else that used to be cobalt is ink.
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, ScrollView } from "react-native";
+import { tr } from "../i18n";
 import { CLASS_COLORS, colors, fonts, radius, touch, type } from "../theme";
 
 const keyOf = (o) => (typeof o === "string" ? o : o.code);
@@ -146,7 +147,7 @@ export function ChipWall({ options, value, onChange, renderLabel, show = 6, mono
           accessibilityState={{ expanded }}
         >
           <Text style={[s.chipDashedText, mono && { fontFamily: fonts.mono, fontSize: 13 }]}>
-            {expanded ? "Show less ▴" : `All ${total} ▸`}
+            {expanded ? `${tr("chipLess")} ▴` : `${tr("chipAll")} ${total} ▸`}
           </Text>
         </Pressable>
       )}
