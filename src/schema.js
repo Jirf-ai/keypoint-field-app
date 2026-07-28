@@ -8,7 +8,7 @@
 // flip TRUE for the public release — requires Supabase phone-OTP + an SMS
 // provider wired in (Tech Eval auth stack). The UI for the code step ships
 // now so going public is a flag flip + backend, not a redesign.
-export const REQUIRE_PHONE_VERIFICATION = false;
+export const REQUIRE_PHONE_VERIFICATION = true;
 
 // §4.1 project — the pilot. v1 is one project at a time (PRD §4 non-goals).
 export const PROJECT = {

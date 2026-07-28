@@ -17,7 +17,8 @@ import { Btn, Card, ChipWall, Field, GroupLabel, Muted, preferred } from "../com
 import { call } from "../api";
 import { REQUIRE_PHONE_VERIFICATION, TRADES } from "../schema";
 import { copyToClipboard } from "../util";
-import { createProfile, gcAccount, joinByCode, logIn, profiles, resolveShareCode, setGcAccount } from "../store";
+import { newWorkerId, sendOtp, verifyOtp } from "../auth";
+import { createProfile, gcAccount, joinByCode, logIn, profiles, resolveShareCode, restoreProfile, setGcAccount } from "../store";
 import { colors, fonts, type } from "../theme";
 
 const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
@@ -49,6 +50,17 @@ export default function AuthScreen({ t, lang, onDone }) {
   const [code, setCode] = useState("");
   const [codeErr, setCodeErr] = useState(false);
   const [pendingGc, setPendingGc] = useState(null);
+  const [pendingWorkerId, setPendingWorkerId] = useState(null);
+  const [devCode, setDevCode] = useState(null); // dev/pilot: shown so testing works
+
+  // "Log in with phone" — cross-device account restore (its own mini-flow).
+  const [phoneLogin, setPhoneLogin] = useState(false);
+  const [lgPhone, setLgPhone] = useState("");
+  const [lgCode, setLgCode] = useState("");
+  const [lgSent, setLgSent] = useState(false);
+  const [lgDev, setLgDev] = useState(false);
+  const [lgErr, setLgErr] = useState(null);
+  const [lgBusy, setLgBusy] = useState(false);
 
   // GC team code gate: required for every new profile; a GC session on this
   // device pre-fills its own code.
@@ -105,22 +117,24 @@ export default function AuthScreen({ t, lang, onDone }) {
     }
   }
 
-  async function finishCreate(gcInfo) {
+  async function finishCreate(gcInfo, workerId, phoneVerified) {
     const p = await createProfile({
+      worker_id: workerId,
       display_name: name.trim(),
       default_trade: trade,
       lang,
       selfie_uri: await ensureDurable(selfie),
       phone: phone.replace(/\D/g, "") || null,
+      phone_verified: !!phoneVerified,
       role,
       gc: gcInfo,
     });
     // Crew join their manager's project list right after the profile exists.
     if (isCrew && mgrCode.trim()) await joinByCode(mgrCode);
-    // Record the worker under the GC server-side (idempotent upsert on
-    // worker_id — a reinstall re-registering is harmless). Fire-and-forget:
-    // the code was already validated online a moment ago.
-    if (gcInfo?.gc_code) {
+    // When phone-verified, worker-auth already recorded the worker (with
+    // phone_verified) on this phone. Only the non-OTP path still needs
+    // gc-account to register it. Fire-and-forget: the code was validated online.
+    if (!phoneVerified && gcInfo?.gc_code) {
       call("gc-account", {
         action: "verify",
         gc_code: gcInfo.gc_code,
@@ -169,23 +183,72 @@ export default function AuthScreen({ t, lang, onDone }) {
     setBusy(true);
     setCodeState(null);
     const gcInfo = await validateTeamCode();
-    setBusy(false);
-    if (!gcInfo) return;
+    if (!gcInfo) { setBusy(false); return; }
     if (REQUIRE_PHONE_VERIFICATION) {
-      if (!phone.trim()) return;
+      if (!phone.trim()) { setBusy(false); return; }
+      const send = await sendOtp(phone.replace(/\D/g, ""));
+      setBusy(false);
+      if (!send?.ok) { setErr(send?.error ?? t("needOnline")); return; }
       setPendingGc(gcInfo);
+      setPendingWorkerId(newWorkerId());
+      setDevCode(send.dev_code ?? null);
+      if (send.dev_code) setCode(send.dev_code); // prefill for dev/pilot testing
       setVerifying(true);
       return;
     }
-    await finishCreate(gcInfo);
+    setBusy(false);
+    await finishCreate(gcInfo, newWorkerId(), false);
   }
 
   async function verifyCode() {
-    if (code.trim().length !== 6) {
+    const c = code.trim();
+    if (c.length !== 6) {
       setCodeErr(true);
       return;
     }
-    await finishCreate(pendingGc);
+    setBusy(true);
+    setCodeErr(false);
+    const worker = {
+      worker_id: pendingWorkerId,
+      display_name: name.trim(),
+      role,
+      trade,
+      gc_account_id: pendingGc?.gc_account_id ?? null,
+    };
+    const r = await verifyOtp(phone.replace(/\D/g, ""), c, worker);
+    setBusy(false);
+    if (!r?.ok || !r.verified) {
+      setCodeErr(true);
+      return;
+    }
+    await finishCreate(pendingGc, pendingWorkerId, true);
+  }
+
+  // ---- Log in with phone (cross-device restore) ----
+  async function lgSend() {
+    const ph = lgPhone.replace(/\D/g, "");
+    if (ph.length < 10) { setLgErr(t("codeWrong")); return; }
+    setLgBusy(true);
+    setLgErr(null);
+    const send = await sendOtp(ph);
+    setLgBusy(false);
+    if (!send?.ok) { setLgErr(send?.error ?? t("needOnline")); return; }
+    setLgSent(true);
+    setLgDev(!!send.dev_code);
+    if (send.dev_code) setLgCode(send.dev_code); // dev/pilot prefill
+  }
+
+  async function lgVerify() {
+    const ph = lgPhone.replace(/\D/g, "");
+    if (lgCode.trim().length !== 6) { setLgErr(t("codeWrong")); return; }
+    setLgBusy(true);
+    setLgErr(null);
+    const r = await verifyOtp(ph, lgCode.trim());
+    setLgBusy(false);
+    if (!r?.ok || !r.verified) { setLgErr(t("codeWrong")); return; }
+    if (!r.accounts || r.accounts.length === 0) { setLgErr(t("noAccountForPhone")); return; }
+    const p = await restoreProfile(r.accounts[0], ph);
+    onDone(p);
   }
 
   async function pick(worker_id) {
@@ -241,6 +304,51 @@ export default function AuthScreen({ t, lang, onDone }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     }
+  }
+
+  // ---- Log in with phone (cross-device account restore) ----
+  if (phoneLogin) {
+    return (
+      <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
+        <View style={s.head}>
+          <Text style={type.screenTitle}>{t("phoneLoginTitle")}</Text>
+          <Text style={s.headSub}>{t("phoneLoginHint")}</Text>
+        </View>
+        <Card>
+          <Field
+            label={t("phone")}
+            value={lgPhone}
+            onChangeText={(x) => setLgPhone(formatPhone(x))}
+            keyboardType="phone-pad"
+            autoCapitalize="none"
+            placeholder="(626) - 555 - 0100"
+          />
+          {lgSent && (
+            <>
+              {lgDev ? <Muted style={{ marginTop: 12 }}>{t("devCodeNote")} {lgCode}</Muted> : null}
+              <Field
+                label={t("enterCode")}
+                value={lgCode}
+                onChangeText={(x) => setLgCode(x.replace(/[^0-9]/g, "").slice(0, 6))}
+                keyboardType="number-pad"
+                autoCapitalize="none"
+                placeholder="______"
+                style={{ marginTop: 8 }}
+              />
+            </>
+          )}
+          {lgErr && <Text style={s.err}>{lgErr}</Text>}
+        </Card>
+        <View style={{ paddingHorizontal: 14, gap: 10 }}>
+          {!lgSent ? (
+            <Btn label={t("sendCode")} onPress={lgSend} disabled={lgBusy || lgPhone.replace(/\D/g, "").length < 10} />
+          ) : (
+            <Btn label={t("logIn")} onPress={lgVerify} disabled={lgBusy || lgCode.length !== 6} />
+          )}
+          <Btn label={t("cancel")} onPress={() => { setPhoneLogin(false); setLgSent(false); setLgCode(""); setLgErr(null); }} variant="outline" />
+        </View>
+      </ScrollView>
+    );
   }
 
   // ---- GC: register the company ----
@@ -344,6 +452,7 @@ export default function AuthScreen({ t, lang, onDone }) {
         </Card>
         <View style={{ paddingHorizontal: 14, gap: 10 }}>
           <Btn label={t("createAccount")} onPress={() => setCreating(true)} variant="outline" />
+          <Btn label={`📱  ${t("loginWithPhone")}`} onPress={() => setPhoneLogin(true)} variant="outline" />
           <Btn label={`🏗  ${t("gcEntry")}`} onPress={() => setGcMode(gc ? "code" : "register")} variant="outline" />
         </View>
       </ScrollView>
@@ -426,10 +535,11 @@ export default function AuthScreen({ t, lang, onDone }) {
       {verifying && (
         <Card>
           <GroupLabel>{t("enterCode")}</GroupLabel>
+          {devCode ? <Muted style={{ marginBottom: 8 }}>{t("devCodeNote")} {devCode}</Muted> : null}
           <Field value={code} onChangeText={(x) => { setCode(x.replace(/[^0-9]/g, "").slice(0, 6)); setCodeErr(false); }} keyboardType="number-pad" autoCapitalize="none" placeholder="______" />
           {codeErr && <Text style={s.err}>{t("codeWrong")}</Text>}
           <View style={{ gap: 10, marginTop: 12 }}>
-            <Btn label={t("verify")} onPress={verifyCode} disabled={code.length !== 6} />
+            <Btn label={t("verify")} onPress={verifyCode} disabled={busy || code.length !== 6} />
             <Btn label={t("cancel")} onPress={() => setVerifying(false)} variant="outline" />
           </View>
         </Card>
@@ -443,6 +553,7 @@ export default function AuthScreen({ t, lang, onDone }) {
             disabled={busy || !role || !name.trim() || !teamCode.trim() || !selfie || (isCrew && mgrCode.trim().length < 4)}
           />
           {existing.length > 0 && <Btn label={t("logIn")} onPress={() => setCreating(false)} variant="outline" />}
+          <Btn label={`📱  ${t("loginWithPhone")}`} onPress={() => setPhoneLogin(true)} variant="outline" />
           <Btn label={`🏗  ${t("gcEntry")}`} onPress={() => setGcMode(gc ? "code" : "register")} variant="outline" />
         </View>
       )}
