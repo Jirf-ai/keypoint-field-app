@@ -136,7 +136,7 @@ the PRD fenced off. Built items marked ✅.
 - **CS-03** Browse **my photos** for a project.
 
 ### I — Foreman oversight & completeness
-- **OV-01 ⭐** See **which crew haven't logged today**.
+- **OV-01 ⭐ ✅** See **which crew haven't logged today**.
 - **OV-02** **Duplicate yesterday** as a starting point.
 - **OV-03 ⚠** **Approve/reject** a crew member's submitted hours — approval workflow.
 
@@ -223,6 +223,25 @@ get AC when scheduled.
 - [ ] Tagged to project, phase/area, date; provenance stamped.
 - [ ] Reason is an enum (not free text) so it aggregates across jobs.
 - [ ] Offline-first; append-only; es/zh complete.
+
+### OV-01 — Which crew haven't logged today ✅ (built)
+> As a site manager, I want to see which crew haven't logged today, so I can
+> chase the gap before it becomes permanently lost data.
+
+- [x] A **Crew today** card on the SM's Today screen shows "logged / total",
+      tapping into a detail screen. Site-manager only.
+- [x] Detail lists **Not yet logged first** (the actionable list), then Logged
+      with each worker's hours; a success notice when everyone has logged.
+- [x] Roster = crew this device knows to be on my team (journeymen who joined my
+      share code here, or the same GC team account); "logged" = ≥1 labor line for
+      the current project today, matched by worker name.
+- [x] Honest empty state explaining the roster fills as crew join on this device
+      or after sync (device-local until roster sync lands).
+- [x] Read-only; es/zh complete.
+
+**Architectural note:** true cross-device rosters need the server to return the
+project's roster and per-worker log status. The selector shape (`crewLogStatus`)
+is already the synced shape — it just reads local profiles/lines for now.
 
 ---
 

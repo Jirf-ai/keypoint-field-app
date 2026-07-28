@@ -492,6 +492,38 @@ export function loggedLaborToday(refDate = todayStr()) {
   );
 }
 
+// OV-01 — who on my crew hasn't logged today. The roster is the crew profiles
+// this device knows to be on my team: journeymen who joined my share code, or
+// who registered under the same GC team account. "Logged" = at least one labor
+// line for the current project today, matched by worker name (the app's identity
+// key). Device-local for now; the same shape fills from the server once roster
+// sync lands. Site-manager only.
+export function crewLogStatus(refDate = todayStr()) {
+  const me = activeProfile();
+  const pid = state.current_project?.id;
+  if (!me || me.role !== "site_manager") return { logged: [], missing: [], total: 0, loggedCount: 0 };
+  const roster = (state.profiles ?? []).filter(
+    (p) =>
+      p.role === "journeyman" &&
+      p.worker_id !== me.worker_id &&
+      ((p.joined_owner_ids ?? []).includes(me.worker_id) || (p.gc_account_id && p.gc_account_id === me.gc_account_id))
+  );
+  const hoursFor = (name) =>
+    state.lines
+      .filter((l) => l.kind === "labor" && !l.superseded_by && l.worker === name && l.project_id === pid && l.work_date === refDate)
+      .reduce((sum, l) => sum + Number(l.hours || 0), 0);
+  const logged = [];
+  const missing = [];
+  for (const p of roster) {
+    const hours = hoursFor(p.display_name);
+    const row = { worker_id: p.worker_id, name: p.display_name, trade: p.default_trade, selfie: p.selfie_uri, hours };
+    (hours > 0 ? logged : missing).push(row);
+  }
+  logged.sort((a, b) => b.hours - a.hours);
+  missing.sort((a, b) => a.name.localeCompare(b.name));
+  return { logged, missing, total: roster.length, loggedCount: logged.length };
+}
+
 // The active worker's own hours for the week containing refDate — the thing the
 // crew gets back for logging (CS-01). Across ALL their projects (a pay week is
 // not per-job); active versions only, grouped by day, hour type, and project.

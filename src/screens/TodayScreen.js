@@ -9,6 +9,7 @@ import { phaseLabel } from "../i18n";
 import {
   activeLines,
   activeProfile,
+  crewLogStatus,
   currentProject,
   dayStatus,
   myWeekHours,
@@ -43,6 +44,8 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
   const hasEntries = lines.length > 0 || photos.length > 0;
   // Crew get their own week back for logging (CS-01) — the adoption lever.
   const week = !isSM ? myWeekHours() : null;
+  // Site managers see who on their crew hasn't logged today (OV-01).
+  const crew = isSM ? crewLogStatus(workDate) : null;
 
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
@@ -160,6 +163,22 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
               <View style={s.weekRow}>
                 <Text style={s.weekHours}>{Number(week.total).toFixed(1)}</Text>
                 <Text style={s.weekUnit}>{t("statHours").toLowerCase()}</Text>
+              </View>
+            </View>
+            <Text style={s.weekCaret}>›</Text>
+          </Card>
+        </Pressable>
+      )}
+
+      {/* Site manager: who on the crew hasn't logged today (OV-01). */}
+      {isSM && project && crew.total > 0 && (
+        <Pressable onPress={() => nav("crew")} accessibilityRole="button" accessibilityLabel={t("crewTitle")}>
+          <Card style={{ marginTop: 14, flexDirection: "row", alignItems: "center" }}>
+            <View style={{ flex: 1 }}>
+              <GroupLabel>{t("crewTitle")}</GroupLabel>
+              <View style={s.weekRow}>
+                <Text style={s.weekHours}>{crew.loggedCount}</Text>
+                <Text style={s.weekUnit}>/ {crew.total} {t("loggedToday")}</Text>
               </View>
             </View>
             <Text style={s.weekCaret}>›</Text>
