@@ -249,9 +249,17 @@ export default function AuthScreen({ t, lang, onDone }) {
     const r = await verifyOtp(ph, lgCode.trim());
     setLgBusy(false);
     if (!r?.ok || !r.verified) { setLgErr(t("codeWrong")); return; }
-    if (!r.accounts || r.accounts.length === 0) { setLgErr(t("noAccountForPhone")); return; }
-    const p = await restoreProfile(r.accounts[0], ph);
-    onDone(p);
+    // One phone can carry a worker account and/or a GC session — restore both.
+    if (r.gc) await setGcAccount(r.gc);
+    if (r.accounts && r.accounts.length > 0) {
+      const p = await restoreProfile(r.accounts[0], ph);
+      onDone(p);
+      return;
+    }
+    // A GC whose phone has no worker profile yet → show their team code and let
+    // them create their own worker profile.
+    if (r.gc) { setPhoneLogin(false); setGcMode("code"); return; }
+    setLgErr(t("noAccountForPhone"));
   }
 
   async function pick(worker_id) {
@@ -280,23 +288,6 @@ export default function AuthScreen({ t, lang, onDone }) {
     await setGcAccount({
       gc_account_id: r.gc_account_id, gc_code: r.gc_code,
       business_name: r.business_name, phone: gcPhone.trim(), email: gcEmail.trim(),
-    });
-    setTeamCode(r.gc_code);
-    setGcMode("code");
-  }
-
-  async function gcLogin() {
-    setBusy(true);
-    setGcErr(null);
-    let r;
-    try {
-      r = await call("gc-account", { action: "login", gc_code: teamCode.trim().toUpperCase(), phone: gcPhone.trim() });
-    } catch { r = null; }
-    setBusy(false);
-    if (!r?.ok) { setGcErr(r?.status === 404 ? t("gcNotFound") : t("needOnline")); return; }
-    await setGcAccount({
-      gc_account_id: r.gc_account_id, gc_code: r.gc_code,
-      business_name: r.business_name, phone: r.phone, email: r.email,
     });
     setTeamCode(r.gc_code);
     setGcMode("code");
@@ -416,29 +407,11 @@ export default function AuthScreen({ t, lang, onDone }) {
         </Card>
         <View style={{ paddingHorizontal: 14, gap: 10 }}>
           <Btn label={t("gcRegister")} onPress={gcRegister} disabled={busy || !gcBiz.trim() || !gcPhone.trim() || !gcEmail.trim() || !gcConsent} />
-          <Btn label={t("gcLoginTab")} onPress={() => { setGcErr(null); setGcMode("login"); }} variant="outline" />
           <Btn label={t("cancel")} onPress={() => { setGcErr(null); setGcMode(null); setChooser(true); }} variant="outline" />
-        </View>
-      </ScrollView>
-    );
-  }
-
-  // ---- GC: log back in (code + business phone) ----
-  if (gcMode === "login") {
-    return (
-      <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
-        <View style={s.head}>
-          <Text style={type.screenTitle}>{t("gcLoginTab")}</Text>
-          <Text style={s.headSub}>{t("gcLoginHint")}</Text>
-        </View>
-        <Card>
-          <Field label={t("teamCode")} value={teamCode} onChangeText={(x) => setTeamCode(x.toUpperCase())} autoCapitalize="characters" placeholder="LOR-7XK4" style={{ marginBottom: 12 }} />
-          <Field label={t("gcPhone")} value={gcPhone} onChangeText={(x) => setGcPhone(formatPhone(x))} keyboardType="phone-pad" autoCapitalize="none" />
-          {gcErr && <Text style={s.err}>{gcErr}</Text>}
-        </Card>
-        <View style={{ paddingHorizontal: 14, gap: 10 }}>
-          <Btn label={t("logIn")} onPress={gcLogin} disabled={busy || !teamCode.trim() || !gcPhone.trim()} />
-          <Btn label={t("cancel")} onPress={() => { setGcErr(null); setGcMode(null); setChooser(true); }} variant="outline" />
+          {/* Returning GC: log in with the business phone (unified with workers). */}
+          <Pressable onPress={() => { setGcErr(null); setGcMode(null); setPhoneLogin(true); }} hitSlop={8} accessibilityRole="button" style={s.backLinkWrap}>
+            <Text style={s.backLink}>{t("haveAccount")}</Text>
+          </Pressable>
         </View>
       </ScrollView>
     );

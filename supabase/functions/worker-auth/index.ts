@@ -168,7 +168,26 @@ Deno.serve(async (req) => {
       gc_business: r.gc_account_id ? gcMap[r.gc_account_id]?.business_name ?? null : null,
     }));
 
-    return json({ ok: true, verified: true, phone, accounts });
+    // GC owner? If this phone is a registered GC's business phone, hand back the
+    // contractor account so one phone login restores the GC session too — no
+    // separate "GC log in". (Pilot-scale scan + digit match; gc_accounts.phone
+    // may be formatted, so it's compared on digits.)
+    let gc = null;
+    const { data: gcs } = await supabase.from("gc_accounts")
+      .select("id, gc_code, business_name, contact_name, phone, email")
+      .eq("status", "active");
+    const gcMatch = (gcs ?? []).find((g) => digits(g.phone) === phone);
+    if (gcMatch) {
+      gc = {
+        gc_account_id: gcMatch.id,
+        gc_code: gcMatch.gc_code,
+        business_name: gcMatch.business_name,
+        phone: gcMatch.phone,
+        email: gcMatch.email,
+      };
+    }
+
+    return json({ ok: true, verified: true, phone, accounts, gc });
   }
 
   return json({ error: "action must be send-otp | verify-otp" }, 400);
