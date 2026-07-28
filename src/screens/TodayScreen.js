@@ -11,6 +11,7 @@ import {
   activeProfile,
   currentProject,
   dayStatus,
+  myWeekHours,
   photosFor,
   recentProjects,
   setCurrentProject,
@@ -40,6 +41,8 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
   if (isSM) tiles.push({ key: "item", glyph: "📦", label: t("tileItem"), tone: "ink" });
 
   const hasEntries = lines.length > 0 || photos.length > 0;
+  // Crew get their own week back for logging (CS-01) — the adoption lever.
+  const week = !isSM ? myWeekHours() : null;
 
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
@@ -148,6 +151,22 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
         )}
       </View>
 
+      {/* Crew: this week's own hours, tap for the day breakdown (CS-01). */}
+      {!isSM && project && (
+        <Pressable onPress={() => nav("myhours")} accessibilityRole="button" accessibilityLabel={t("myHours")}>
+          <Card style={{ marginTop: 14, flexDirection: "row", alignItems: "center" }}>
+            <View style={{ flex: 1 }}>
+              <GroupLabel>{t("thisWeek")}</GroupLabel>
+              <View style={s.weekRow}>
+                <Text style={s.weekHours}>{Number(week.total).toFixed(1)}</Text>
+                <Text style={s.weekUnit}>{t("statHours").toLowerCase()}</Text>
+              </View>
+            </View>
+            <Text style={s.weekCaret}>›</Text>
+          </Card>
+        </Pressable>
+      )}
+
       {/* Site-manager duties, below the ledger. */}
       {isSM && (
         <View style={s.smActions}>
@@ -181,4 +200,8 @@ const s = StyleSheet.create({
   rollupMeta: { alignItems: "flex-end" },
   metaLine: { fontFamily: fonts.mono, fontSize: 10.5, color: colors.label, lineHeight: 18, letterSpacing: 0.4, fontVariant: ["tabular-nums"] },
   smActions: { paddingHorizontal: 14, gap: 8, marginTop: 4 },
+  weekRow: { flexDirection: "row", alignItems: "baseline", gap: 5 },
+  weekHours: { fontFamily: fonts.display, fontWeight: "800", fontSize: 26, letterSpacing: -0.7, color: colors.text, fontVariant: ["tabular-nums"] },
+  weekUnit: { fontFamily: fonts.body, fontSize: 13, fontWeight: "600", color: colors.textMuted },
+  weekCaret: { color: colors.accent, fontSize: 22, fontWeight: "800" },
 });

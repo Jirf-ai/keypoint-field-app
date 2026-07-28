@@ -11,6 +11,12 @@ export function dateStamp(workDate, lang) {
   return `${wd} ${d.getDate()} ${mo} ${d.getFullYear()}`;
 }
 
+// Short localized weekday for a date string — "Mon" / "lun" / "周一".
+export function weekdayLabel(dateStr, lang) {
+  const locale = lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US";
+  return new Date(dateStr + "T12:00:00").toLocaleDateString(locale, { weekday: "short" }).replace(".", "");
+}
+
 // Copy text to the clipboard on web or native. Returns true on success; on
 // failure the caller's code stays visible + selectable so nothing is lost.
 export async function copyToClipboard(text) {

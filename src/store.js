@@ -467,6 +467,46 @@ export function nextPhotoSeq(work_date) {
   return photosFor(work_date).length + 1;
 }
 
+// The 7 dates (Mon…Sun) of the calendar week containing `refStr`.
+function weekDays(refStr) {
+  const d = new Date(refStr + "T12:00:00");
+  const dow = (d.getDay() + 6) % 7; // Mon=0 … Sun=6
+  const base = new Date(d);
+  base.setDate(d.getDate() - dow);
+  const p = (n) => String(n).padStart(2, "0");
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    const x = new Date(base);
+    x.setDate(base.getDate() + i);
+    out.push(`${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`);
+  }
+  return out;
+}
+
+// The active worker's own hours for the week containing refDate — the thing the
+// crew gets back for logging (CS-01). Across ALL their projects (a pay week is
+// not per-job); active versions only, grouped by day, hour type, and project.
+export function myWeekHours(refDate = todayStr()) {
+  const name = activeProfile()?.display_name;
+  const days = weekDays(refDate);
+  const idx = Object.fromEntries(days.map((d, i) => [d, i]));
+  const rows = days.map((date) => ({ date, hours: 0 }));
+  const byType = { regular: 0, overtime: 0, rework: 0 };
+  const byProject = {};
+  let total = 0;
+  for (const l of state.lines) {
+    if (l.kind !== "labor" || l.superseded_by || l.worker !== name) continue;
+    if (!(l.work_date in idx)) continue;
+    const h = Number(l.hours || 0);
+    total += h;
+    rows[idx[l.work_date]].hours += h;
+    if (byType[l.hour_type] != null) byType[l.hour_type] += h;
+    const key = l.project_name || l.project_id || "—";
+    byProject[key] = (byProject[key] || 0) + h;
+  }
+  return { days: rows, total, byType, byProject };
+}
+
 export function nextCoNo() {
   const pid = state.current_project?.id;
   const n = state.change_orders.filter((c) => c.project_id === pid).length + 1;

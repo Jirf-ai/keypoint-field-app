@@ -19,6 +19,7 @@ import AddPhotoScreen from "./src/screens/AddPhotoScreen";
 import AddProjectScreen from "./src/screens/AddProjectScreen";
 import JoinListScreen from "./src/screens/JoinListScreen";
 import ChangeOrdersScreen from "./src/screens/ChangeOrdersScreen";
+import MyHoursScreen from "./src/screens/MyHoursScreen";
 import ReviewScreen from "./src/screens/ReviewScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import TodayScreen from "./src/screens/TodayScreen";
@@ -81,6 +82,7 @@ const TITLES = {
   settings: "settings",
   addproject: "addProjectTitle",
   joinlist: "joinListTitle",
+  myhours: "myHours",
 };
 
 export default function App() {
@@ -265,6 +267,7 @@ export default function App() {
         {authed && screen === "labor" && <AddLaborScreen t={t} lang={lang} workDate={workDate} onDone={done} editing={editLine} />}
         {authed && screen === "photo" && <AddPhotoScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
         {authed && screen === "review" && <ReviewScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
+        {authed && screen === "myhours" && <MyHoursScreen t={t} lang={lang} />}
         {authed && screen === "cos" && <ChangeOrdersScreen t={t} workDate={workDate} onDone={done} />}
         {authed && screen === "addproject" && <AddProjectScreen t={t} onDone={done} />}
         {authed && screen === "joinlist" && <JoinListScreen t={t} onDone={done} />}
