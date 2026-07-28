@@ -552,9 +552,11 @@ export default function AuthScreen({ t, lang, onDone }) {
             onPress={create}
             disabled={busy || !role || !name.trim() || !teamCode.trim() || !selfie || (isCrew && mgrCode.trim().length < 4)}
           />
-          {existing.length > 0 && <Btn label={t("logIn")} onPress={() => setCreating(false)} variant="outline" />}
-          <Btn label={`📱  ${t("loginWithPhone")}`} onPress={() => setPhoneLogin(true)} variant="outline" />
           <Btn label={`🏗  ${t("gcEntry")}`} onPress={() => setGcMode(gc ? "code" : "register")} variant="outline" />
+          {/* Login lives on the log-in hub, not here — one quiet way back. */}
+          <Pressable onPress={() => setCreating(false)} hitSlop={8} accessibilityRole="button" style={s.backLinkWrap}>
+            <Text style={s.backLink}>{t("haveAccount")}</Text>
+          </Pressable>
         </View>
       )}
     </ScrollView>
@@ -564,6 +566,8 @@ export default function AuthScreen({ t, lang, onDone }) {
 const s = StyleSheet.create({
   head: { paddingHorizontal: 14, marginTop: 4, marginBottom: 8 },
   headSub: { fontFamily: fonts.body, fontSize: 14, color: colors.textMuted, marginTop: 4 },
+  backLinkWrap: { alignItems: "center", paddingVertical: 8, marginTop: 2 },
+  backLink: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "700", color: colors.accent },
 
   roleGrid: { flexDirection: "row", gap: 8 },
   roleBtn: { flex: 1, minHeight: 50, borderRadius: 8, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" },
