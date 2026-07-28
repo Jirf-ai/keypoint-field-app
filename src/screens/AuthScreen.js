@@ -55,6 +55,11 @@ export default function AuthScreen({ t, lang, onDone }) {
   const [pendingGc, setPendingGc] = useState(null);
   const [pendingWorkerId, setPendingWorkerId] = useState(null);
   const [devCode, setDevCode] = useState(null); // dev/pilot: shown so testing works
+  // Contractor sign-up is one flow: register the company + create the owner's own
+  // site-manager profile, verified by a single OTP. gcVerifying = the code step;
+  // justCreated = the freshly made profile shown on the team-code confirmation.
+  const [gcVerifying, setGcVerifying] = useState(false);
+  const [justCreated, setJustCreated] = useState(null);
 
   // "Log in with phone" — cross-device account restore (its own mini-flow).
   const [phoneLogin, setPhoneLogin] = useState(false);
@@ -268,8 +273,9 @@ export default function AuthScreen({ t, lang, onDone }) {
   }
 
   // ---------------------------------------------------------------- GC panel
-  async function gcRegister() {
-    if (!gcBiz.trim() || !gcPhone.trim() || !gcEmail.trim() || !gcConsent) return;
+  // Step 1: register the company, then send the OTP to the contractor's phone.
+  async function gcSignupSend() {
+    if (!gcBiz.trim() || !gcContact.trim() || !gcPhone.trim() || !gcEmail.trim() || !gcConsent || !selfie) return;
     setBusy(true);
     setGcErr(null);
     let r;
@@ -277,20 +283,54 @@ export default function AuthScreen({ t, lang, onDone }) {
       r = await call("gc-account", {
         action: "register",
         business_name: gcBiz.trim(),
-        contact_name: gcContact.trim() || null,
+        contact_name: gcContact.trim(),
         phone: gcPhone.trim(),
         email: gcEmail.trim(),
         consent: true,
       });
     } catch { r = null; }
+    if (!r?.ok) { setBusy(false); setGcErr(r?.error ? t("gcNotFound") : t("needOnline")); return; }
+    const gcInfo = { gc_account_id: r.gc_account_id, gc_code: r.gc_code, business_name: r.business_name };
+    await setGcAccount({ ...gcInfo, phone: gcPhone.trim(), email: gcEmail.trim() });
+    const send = await sendOtp(gcPhone.replace(/\D/g, ""));
     setBusy(false);
-    if (!r?.ok) { setGcErr(r?.error ? t("gcNotFound") : t("needOnline")); return; }
-    await setGcAccount({
-      gc_account_id: r.gc_account_id, gc_code: r.gc_code,
-      business_name: r.business_name, phone: gcPhone.trim(), email: gcEmail.trim(),
+    if (!send?.ok) { setGcErr(send?.error ?? t("needOnline")); return; }
+    setPendingGc(gcInfo);
+    setPendingWorkerId(newWorkerId());
+    setDevCode(send.dev_code ?? null);
+    if (send.dev_code) setCode(send.dev_code);
+    setGcVerifying(true);
+  }
+
+  // Step 2: verify the code, then create the contractor's own site-manager
+  // profile (linked to the new company). One flow — no separate account.
+  async function gcSignupVerify() {
+    if (code.trim().length !== 6) { setCodeErr(true); return; }
+    setBusy(true);
+    setCodeErr(false);
+    const worker = {
+      worker_id: pendingWorkerId,
+      display_name: gcContact.trim(),
+      role: "site_manager",
+      gc_account_id: pendingGc?.gc_account_id ?? null,
+    };
+    const r = await verifyOtp(gcPhone.replace(/\D/g, ""), code.trim(), worker);
+    if (!r?.ok || !r.verified) { setBusy(false); setCodeErr(true); return; }
+    const p = await createProfile({
+      worker_id: pendingWorkerId,
+      display_name: gcContact.trim(),
+      default_trade: null,
+      lang,
+      selfie_uri: await ensureDurable(selfie),
+      phone: gcPhone.replace(/\D/g, "") || null,
+      phone_verified: true,
+      role: "site_manager",
+      gc: pendingGc,
     });
-    setTeamCode(r.gc_code);
-    setGcMode("code");
+    setBusy(false);
+    setJustCreated(p);
+    setGcVerifying(false);
+    setGcMode("code"); // confirm the team code, then Continue into the app
   }
 
   async function copyCode(codeStr) {
@@ -298,6 +338,25 @@ export default function AuthScreen({ t, lang, onDone }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     }
+  }
+
+  // Start a fresh contractor sign-up — always available, even if a GC session
+  // already exists on this device (you can register another company). Clears any
+  // leftover form state so the new registration starts blank.
+  function startGcSignup() {
+    setGcBiz("");
+    setGcContact("");
+    setGcPhone("");
+    setGcEmail("");
+    setGcConsent(false);
+    setSelfie(null);
+    setGcVerifying(false);
+    setGcErr(null);
+    setCode("");
+    setCodeErr(false);
+    setDevCode(null);
+    setChooser(false);
+    setGcMode("register");
   }
 
   // ---- Log in with phone (cross-device account restore) ----
@@ -364,7 +423,7 @@ export default function AuthScreen({ t, lang, onDone }) {
             <Text style={s.choiceChevron}>›</Text>
           </Card>
         </Pressable>
-        <Pressable onPress={() => { setChooser(false); setGcMode(gc ? "code" : "register"); }} accessibilityRole="button" accessibilityLabel={t("gcChoice")}>
+        <Pressable onPress={startGcSignup} accessibilityRole="button" accessibilityLabel={t("gcChoice")}>
           <Card style={s.choiceCard}>
             <View style={{ flex: 1 }}>
               <Text style={s.choiceTitle}>🏗  {t("gcChoice")}</Text>
@@ -380,7 +439,7 @@ export default function AuthScreen({ t, lang, onDone }) {
     );
   }
 
-  // ---- GC: register the company ----
+  // ---- Contractor sign-up: company + the owner's own profile, one flow ----
   if (gcMode === "register") {
     return (
       <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
@@ -390,10 +449,25 @@ export default function AuthScreen({ t, lang, onDone }) {
         </View>
         <Card>
           <Field label={t("businessName")} value={gcBiz} onChangeText={setGcBiz} style={{ marginBottom: 12 }} />
-          <Field label={t("contactName")} value={gcContact} onChangeText={setGcContact} style={{ marginBottom: 12 }} />
+          <Field label={t("nameLabel")} value={gcContact} onChangeText={setGcContact} style={{ marginBottom: 12 }} />
           <Field label={t("gcPhone")} value={gcPhone} onChangeText={(x) => setGcPhone(formatPhone(x))} keyboardType="phone-pad" autoCapitalize="none" placeholder="(626) - 555 - 0100" style={{ marginBottom: 12 }} />
           <Field label={t("gcEmail")} value={gcEmail} onChangeText={setGcEmail} autoCapitalize="none" keyboardType="email-address" />
         </Card>
+
+        <Pressable onPress={takeSelfie} accessibilityRole="button" accessibilityLabel={t("selfieShort")}>
+          <Card style={s.selfieCard}>
+            {selfie ? (
+              <Image source={{ uri: selfie }} style={s.selfieImg} />
+            ) : (
+              <View style={s.selfieCircle}><Text style={s.selfieGlyph}>🤳</Text></View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={s.selfieTitle}>{t("selfieShort")} <Text style={{ color: colors.accent }}>{t("required")}</Text></Text>
+              <Text style={s.selfieSub}>{t("selfieSub")}</Text>
+            </View>
+          </Card>
+        </Pressable>
+
         <Card>
           <GroupLabel>{t("gcConsentTitle")}</GroupLabel>
           <Muted style={{ marginBottom: 12 }}>{t("gcConsentText")}</Muted>
@@ -403,15 +477,31 @@ export default function AuthScreen({ t, lang, onDone }) {
             </View>
             <Text style={s.consentLabel}>{t("gcConsentCheck")}</Text>
           </Pressable>
-          {gcErr && <Text style={s.err}>{gcErr}</Text>}
         </Card>
+
+        {gcVerifying && (
+          <Card>
+            <GroupLabel>{t("enterCode")}</GroupLabel>
+            {devCode ? <Muted style={{ marginBottom: 8 }}>{t("devCodeNote")} {devCode}</Muted> : null}
+            <Field value={code} onChangeText={(x) => { setCode(x.replace(/[^0-9]/g, "").slice(0, 6)); setCodeErr(false); }} keyboardType="number-pad" autoCapitalize="none" placeholder="______" />
+            {codeErr && <Text style={s.err}>{t("codeWrong")}</Text>}
+          </Card>
+        )}
+
+        {gcErr && <Text style={[s.err, { paddingHorizontal: 14 }]}>{gcErr}</Text>}
+
         <View style={{ paddingHorizontal: 14, gap: 10 }}>
-          <Btn label={t("gcRegister")} onPress={gcRegister} disabled={busy || !gcBiz.trim() || !gcPhone.trim() || !gcEmail.trim() || !gcConsent} />
-          <Btn label={t("cancel")} onPress={() => { setGcErr(null); setGcMode(null); setChooser(true); }} variant="outline" />
-          {/* Returning GC: log in with the business phone (unified with workers). */}
-          <Pressable onPress={() => { setGcErr(null); setGcMode(null); setPhoneLogin(true); }} hitSlop={8} accessibilityRole="button" style={s.backLinkWrap}>
-            <Text style={s.backLink}>{t("haveAccount")}</Text>
-          </Pressable>
+          {!gcVerifying ? (
+            <Btn label={t("sendCode")} onPress={gcSignupSend} disabled={busy || !gcBiz.trim() || !gcContact.trim() || !gcPhone.trim() || !gcEmail.trim() || !gcConsent || !selfie} />
+          ) : (
+            <Btn label={t("verify")} onPress={gcSignupVerify} disabled={busy || code.length !== 6} />
+          )}
+          <Btn label={t("cancel")} onPress={() => { setGcErr(null); setGcVerifying(false); setGcMode(null); setChooser(true); }} variant="outline" />
+          {!gcVerifying && (
+            <Pressable onPress={() => { setGcErr(null); setGcMode(null); setPhoneLogin(true); }} hitSlop={8} accessibilityRole="button" style={s.backLinkWrap}>
+              <Text style={s.backLink}>{t("haveAccount")}</Text>
+            </Pressable>
+          )}
         </View>
       </ScrollView>
     );
@@ -431,7 +521,11 @@ export default function AuthScreen({ t, lang, onDone }) {
         </Card>
         <View style={{ paddingHorizontal: 14, gap: 10 }}>
           <Btn label={copied ? t("copiedCode") : `⧉  ${t("copyCode")}`} onPress={() => copyCode(gc.gc_code)} />
-          <Btn label={t("gcContinueProfile")} onPress={() => { setTeamCode(gc.gc_code); setGcMode(null); setCreating(true); }} variant="outline" />
+          {justCreated ? (
+            <Btn label={t("continueToApp")} onPress={() => onDone(justCreated)} variant="outline" />
+          ) : (
+            <Btn label={t("gcContinueProfile")} onPress={() => { setTeamCode(gc.gc_code); setGcMode(null); setCreating(true); }} variant="outline" />
+          )}
         </View>
       </ScrollView>
     );
