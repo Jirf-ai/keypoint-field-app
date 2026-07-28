@@ -432,27 +432,31 @@ export default function AuthScreen({ t, lang, onDone }) {
       <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
         <View style={s.head}>
           <Text style={type.screenTitle}>{t("logIn")}</Text>
-          <Text style={s.headSub}>{t("pickProfile")}</Text>
+          <Text style={s.headSub}>{existing.length ? t("pickProfile") : t("logInEmptyHint")}</Text>
         </View>
-        <Card>
-          <View style={s.faces}>
-            {existing.map((p) => (
-              <Pressable key={p.worker_id} style={s.face} onPress={() => pick(p.worker_id)} accessibilityRole="button" accessibilityLabel={p.display_name}>
-                {p.selfie_uri ? (
-                  <Image source={{ uri: p.selfie_uri }} style={s.faceImg} />
-                ) : (
-                  <View style={[s.faceImg, s.faceEmpty]}>
-                    <Text style={s.faceInitial}>{p.display_name?.[0] ?? "?"}</Text>
-                  </View>
-                )}
-                <Text style={s.faceName} numberOfLines={1}>{p.display_name}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Card>
+        {existing.length > 0 && (
+          <Card>
+            <View style={s.faces}>
+              {existing.map((p) => (
+                <Pressable key={p.worker_id} style={s.face} onPress={() => pick(p.worker_id)} accessibilityRole="button" accessibilityLabel={p.display_name}>
+                  {p.selfie_uri ? (
+                    <Image source={{ uri: p.selfie_uri }} style={s.faceImg} />
+                  ) : (
+                    <View style={[s.faceImg, s.faceEmpty]}>
+                      <Text style={s.faceInitial}>{p.display_name?.[0] ?? "?"}</Text>
+                    </View>
+                  )}
+                  <Text style={s.faceName} numberOfLines={1}>{p.display_name}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </Card>
+        )}
         <View style={{ paddingHorizontal: 14, gap: 10 }}>
+          {/* Fresh device: phone login is how you actually get in — lead with it. */}
+          {existing.length === 0 && <Btn label={`📱  ${t("loginWithPhone")}`} onPress={() => setPhoneLogin(true)} />}
           <Btn label={t("createAccount")} onPress={() => setCreating(true)} variant="outline" />
-          <Btn label={`📱  ${t("loginWithPhone")}`} onPress={() => setPhoneLogin(true)} variant="outline" />
+          {existing.length > 0 && <Btn label={`📱  ${t("loginWithPhone")}`} onPress={() => setPhoneLogin(true)} variant="outline" />}
           <Btn label={`🏗  ${t("gcEntry")}`} onPress={() => setGcMode(gc ? "code" : "register")} variant="outline" />
         </View>
       </ScrollView>
