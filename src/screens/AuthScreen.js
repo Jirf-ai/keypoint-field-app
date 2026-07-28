@@ -340,6 +340,25 @@ export default function AuthScreen({ t, lang, onDone }) {
     }
   }
 
+  // Start a fresh contractor sign-up — always available, even if a GC session
+  // already exists on this device (you can register another company). Clears any
+  // leftover form state so the new registration starts blank.
+  function startGcSignup() {
+    setGcBiz("");
+    setGcContact("");
+    setGcPhone("");
+    setGcEmail("");
+    setGcConsent(false);
+    setSelfie(null);
+    setGcVerifying(false);
+    setGcErr(null);
+    setCode("");
+    setCodeErr(false);
+    setDevCode(null);
+    setChooser(false);
+    setGcMode("register");
+  }
+
   // ---- Log in with phone (cross-device account restore) ----
   if (phoneLogin) {
     return (
@@ -404,7 +423,7 @@ export default function AuthScreen({ t, lang, onDone }) {
             <Text style={s.choiceChevron}>›</Text>
           </Card>
         </Pressable>
-        <Pressable onPress={() => { setChooser(false); setGcMode(gc ? "code" : "register"); }} accessibilityRole="button" accessibilityLabel={t("gcChoice")}>
+        <Pressable onPress={startGcSignup} accessibilityRole="button" accessibilityLabel={t("gcChoice")}>
           <Card style={s.choiceCard}>
             <View style={{ flex: 1 }}>
               <Text style={s.choiceTitle}>🏗  {t("gcChoice")}</Text>
