@@ -126,9 +126,9 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
                 <Text style={type.moneyRollup}>{usd(totals.money)}</Text>
               </View>
               <View style={s.rollupMeta}>
-                <Text style={s.metaLine}>{totals.count} {t("statLines").toUpperCase()}</Text>
+                <Text style={s.metaLine}>{totals.count} {(totals.count === 1 ? t("statLine") : t("statLines")).toUpperCase()}</Text>
                 <Text style={s.metaLine}>{Number(totals.hours).toFixed(1)} {t("statHours").toUpperCase()}</Text>
-                {photos.length ? <Text style={s.metaLine}>{photos.length} {t("statPhotos").toUpperCase()}</Text> : null}
+                {photos.length ? <Text style={s.metaLine}>{photos.length} {(photos.length === 1 ? t("statPhoto") : t("statPhotos")).toUpperCase()}</Text> : null}
               </View>
             </View>
             {lines.map((l) => {
