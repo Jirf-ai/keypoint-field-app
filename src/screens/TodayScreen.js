@@ -7,7 +7,6 @@ import ProjectPicker from "../components/ProjectPicker";
 import { Btn, Card, CaptureTiles, EmptyState, GroupLabel, LedgerRow, Muted, usd, usdCents } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import {
-  activeLines,
   activeProfile,
   crewLogStatus,
   currentProject,
@@ -16,16 +15,19 @@ import {
   photosFor,
   recentProjects,
   setCurrentProject,
-  todayTotals,
+  visibleLines,
+  visibleTotals,
 } from "../store";
 import { colors, fonts, type } from "../theme";
 import { dateStamp } from "../util";
 
 export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, onFillPhoto, onEditLine, onProjectChange }) {
   const project = currentProject();
-  const lines = activeLines(workDate);
+  // Role-scoped: crew see only their own hours/wage; materials and other
+  // workers' labor are the site manager's view (see visibleLines in store).
+  const lines = visibleLines(workDate);
   const photos = photosFor(workDate);
-  const totals = todayTotals(workDate);
+  const totals = visibleTotals(workDate);
   const status = dayStatus(workDate);
   const me = activeProfile();
   const isSM = me?.role === "site_manager";

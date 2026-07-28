@@ -478,8 +478,7 @@ export async function markSynced(echo, ts) {
   await persist();
 }
 
-export function todayTotals(work_date = todayStr()) {
-  const lines = activeLines(work_date);
+function totalsOf(lines) {
   const byClass = { M: 0, F: 0, L: 0, E: 0, S: 0 };
   let hours = 0;
   for (const l of lines) {
@@ -492,6 +491,27 @@ export function todayTotals(work_date = todayStr()) {
   }
   const money = Object.values(byClass).reduce((a, b) => a + b, 0);
   return { byClass, hours, money, count: lines.length };
+}
+
+export function todayTotals(work_date = todayStr()) {
+  return totalsOf(activeLines(work_date));
+}
+
+// Role-scoped ledger for the Today surface. Crew see only their OWN labor —
+// their hours and their wage, nothing about other workers, and no material
+// lines (materials and costs are the site manager's view). Site managers see
+// the whole day. This is a *view* filter only; activeLines/todayTotals stay
+// complete for Review, warnings, and sync.
+export function visibleLines(work_date) {
+  const all = activeLines(work_date);
+  const me = activeProfile();
+  if (me?.role === "site_manager") return all;
+  const name = me?.display_name;
+  return all.filter((l) => l.kind === "labor" && l.worker === name);
+}
+
+export function visibleTotals(work_date = todayStr()) {
+  return totalsOf(visibleLines(work_date));
 }
 
 export function nextPhotoSeq(work_date) {
