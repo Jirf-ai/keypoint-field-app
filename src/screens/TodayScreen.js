@@ -9,33 +9,30 @@ import { phaseLabel } from "../i18n";
 import {
   activeLines,
   activeProfile,
+  crewLogStatus,
   currentProject,
   dayStatus,
+  myWeekHours,
   photosFor,
   recentProjects,
   setCurrentProject,
   todayTotals,
 } from "../store";
 import { colors, fonts, type } from "../theme";
+import { dateStamp } from "../util";
 
-function datePlate(workDate, lang) {
-  const locale = lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US";
-  const d = new Date(workDate + "T12:00:00");
-  const wd = d.toLocaleDateString(locale, { weekday: "short" }).toUpperCase().replace(".", "");
-  const mo = d.toLocaleDateString(locale, { month: "short" }).toUpperCase().replace(".", "");
-  return `${wd} ${d.getDate()} ${mo} ${d.getFullYear()}`;
-}
-
-export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, onFillPhoto, onProjectChange }) {
+export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, onFillPhoto, onEditLine, onProjectChange }) {
   const project = currentProject();
   const lines = activeLines(workDate);
   const photos = photosFor(workDate);
   const totals = todayTotals(workDate);
   const status = dayStatus(workDate);
-  const isSM = activeProfile()?.role === "site_manager";
+  const me = activeProfile();
+  const isSM = me?.role === "site_manager";
+  const myName = me?.display_name;
   const inbox = isSM ? photos.filter((p) => !p.line_id) : [];
 
-  const dateLabel = datePlate(workDate, lang);
+  const dateLabel = dateStamp(workDate, lang);
   const statusTag = status !== "draft" ? `  ·  ${t(status === "amended" ? "amended" : "submitted")}` : "";
 
   const tiles = [
@@ -45,6 +42,10 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
   if (isSM) tiles.push({ key: "item", glyph: "📦", label: t("tileItem"), tone: "ink" });
 
   const hasEntries = lines.length > 0 || photos.length > 0;
+  // Crew get their own week back for logging (CS-01) — the adoption lever.
+  const week = !isSM ? myWeekHours() : null;
+  // Site managers see who on their crew hasn't logged today (OV-01).
+  const crew = isSM ? crewLogStatus(workDate) : null;
 
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
@@ -125,9 +126,9 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
                 <Text style={type.moneyRollup}>{usd(totals.money)}</Text>
               </View>
               <View style={s.rollupMeta}>
-                <Text style={s.metaLine}>{totals.count} {totals.count === 1 ? "LINE" : "LINES"}</Text>
-                <Text style={s.metaLine}>{Number(totals.hours).toFixed(1)} HRS</Text>
-                {photos.length ? <Text style={s.metaLine}>{photos.length} {photos.length === 1 ? "PHOTO" : "PHOTOS"}</Text> : null}
+                <Text style={s.metaLine}>{totals.count} {t("statLines").toUpperCase()}</Text>
+                <Text style={s.metaLine}>{Number(totals.hours).toFixed(1)} {t("statHours").toUpperCase()}</Text>
+                {photos.length ? <Text style={s.metaLine}>{photos.length} {t("statPhotos").toUpperCase()}</Text> : null}
               </View>
             </View>
             {lines.map((l) => {
@@ -137,11 +138,53 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
                 : Number(l.qty || 0) * Number(l.unit_cost || 0);
               const title = isLabor ? `${l.worker} · ${l.hours}h` : l.description;
               const meta = `${phaseLabel(l.phase, lang)} · ${l.area}${!isLabor && l.qty ? ` · ${l.qty} ${l.unit}` : ""}`;
-              return <LedgerRow key={l.line_id} cls={l.cost_class} title={title} meta={meta} amount={usdCents(amount)} />;
+              const row = <LedgerRow cls={l.cost_class} title={title} meta={meta} amount={usdCents(amount)} />;
+              // SM corrects any line; crew only their own hours. Corrections are
+              // append-only — tapping opens the form prefilled (see amendLine).
+              const canEdit = onEditLine && (isSM || (isLabor && l.worker === myName));
+              return canEdit ? (
+                <Pressable key={l.line_id} onPress={() => onEditLine(l)} accessibilityRole="button" accessibilityLabel={`${t("edit")} · ${title}`}>
+                  {row}
+                </Pressable>
+              ) : (
+                <View key={l.line_id}>{row}</View>
+              );
             })}
           </Card>
         )}
       </View>
+
+      {/* Crew: this week's own hours, tap for the day breakdown (CS-01). */}
+      {!isSM && project && (
+        <Pressable onPress={() => nav("myhours")} accessibilityRole="button" accessibilityLabel={t("myHours")}>
+          <Card style={{ marginTop: 14, flexDirection: "row", alignItems: "center" }}>
+            <View style={{ flex: 1 }}>
+              <GroupLabel>{t("thisWeek")}</GroupLabel>
+              <View style={s.weekRow}>
+                <Text style={s.weekHours}>{Number(week.total).toFixed(1)}</Text>
+                <Text style={s.weekUnit}>{t("statHours").toLowerCase()}</Text>
+              </View>
+            </View>
+            <Text style={s.weekCaret}>›</Text>
+          </Card>
+        </Pressable>
+      )}
+
+      {/* Site manager: who on the crew hasn't logged today (OV-01). */}
+      {isSM && project && crew.total > 0 && (
+        <Pressable onPress={() => nav("crew")} accessibilityRole="button" accessibilityLabel={t("crewTitle")}>
+          <Card style={{ marginTop: 14, flexDirection: "row", alignItems: "center" }}>
+            <View style={{ flex: 1 }}>
+              <GroupLabel>{t("crewTitle")}</GroupLabel>
+              <View style={s.weekRow}>
+                <Text style={s.weekHours}>{crew.loggedCount}</Text>
+                <Text style={s.weekUnit}>/ {crew.total} {t("loggedToday")}</Text>
+              </View>
+            </View>
+            <Text style={s.weekCaret}>›</Text>
+          </Card>
+        </Pressable>
+      )}
 
       {/* Site-manager duties, below the ledger. */}
       {isSM && (
@@ -176,4 +219,8 @@ const s = StyleSheet.create({
   rollupMeta: { alignItems: "flex-end" },
   metaLine: { fontFamily: fonts.mono, fontSize: 10.5, color: colors.label, lineHeight: 18, letterSpacing: 0.4, fontVariant: ["tabular-nums"] },
   smActions: { paddingHorizontal: 14, gap: 8, marginTop: 4 },
+  weekRow: { flexDirection: "row", alignItems: "baseline", gap: 5 },
+  weekHours: { fontFamily: fonts.display, fontWeight: "800", fontSize: 26, letterSpacing: -0.7, color: colors.text, fontVariant: ["tabular-nums"] },
+  weekUnit: { fontFamily: fonts.body, fontSize: 13, fontWeight: "600", color: colors.textMuted },
+  weekCaret: { color: colors.accent, fontSize: 22, fontWeight: "800" },
 });

@@ -9,11 +9,12 @@ import { colors, fonts } from "../theme";
 export default function AddProjectScreen({ t, onDone }) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [areas, setAreas] = useState("");
   const code = myShareCode();
 
   async function save() {
     if (!name.trim()) return;
-    await addOwnedProject({ name, address });
+    await addOwnedProject({ name, address, areas: areas.split(",") });
     onDone();
   }
 
@@ -21,7 +22,8 @@ export default function AddProjectScreen({ t, onDone }) {
     <FormScreen footer={<StickyFooter onCancel={onDone} cancelLabel={t("cancel")} primaryLabel={t("addProjectCta")} onPrimary={save} disabled={!name.trim()} />}>
       <Card>
         <Field label={t("projectNameLabel")} value={name} onChangeText={setName} placeholder={t("projectNamePlaceholder")} style={{ marginBottom: 12 }} />
-        <Field label={t("addressLabel")} value={address} onChangeText={setAddress} placeholder="—" />
+        <Field label={t("addressLabel")} value={address} onChangeText={setAddress} placeholder="—" style={{ marginBottom: 12 }} />
+        <Field label={t("areasLabel")} value={areas} onChangeText={setAreas} autoCapitalize="words" placeholder={t("areasPlaceholder")} hint={t("areasHint")} />
       </Card>
 
       <Card>

@@ -16,6 +16,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Btn, Card, ChipWall, Field, GroupLabel, Muted, preferred } from "../components/ui";
 import { call } from "../api";
 import { REQUIRE_PHONE_VERIFICATION, TRADES } from "../schema";
+import { copyToClipboard } from "../util";
 import { createProfile, gcAccount, joinByCode, logIn, profiles, resolveShareCode, setGcAccount } from "../store";
 import { colors, fonts, type } from "../theme";
 
@@ -236,16 +237,10 @@ export default function AuthScreen({ t, lang, onDone }) {
   }
 
   async function copyCode(codeStr) {
-    try {
-      if (Platform.OS === "web" && navigator?.clipboard) {
-        await navigator.clipboard.writeText(codeStr);
-      } else {
-        const Clipboard = require("react-native").Clipboard;
-        Clipboard?.setString?.(codeStr);
-      }
+    if (await copyToClipboard(codeStr)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
-    } catch { /* code stays visible + selectable */ }
+    }
   }
 
   // ---- GC: register the company ----
@@ -364,7 +359,7 @@ export default function AuthScreen({ t, lang, onDone }) {
       </View>
 
       <Card>
-        <Field label="Name" value={name} onChangeText={setName} placeholder="Goes on every entry" style={{ marginBottom: 12 }} />
+        <Field label={t("nameLabel")} value={name} onChangeText={setName} placeholder={t("nameHint")} style={{ marginBottom: 12 }} />
         <Field label="Phone number" value={phone} onChangeText={(x) => setPhone(formatPhone(x))} keyboardType="phone-pad" autoCapitalize="none" placeholder="(626) - 555 - 0100" hint={t("phoneHint")} style={{ marginBottom: 12 }} />
         {/* No GC code, no account (Jeffrey 2026-07-27): every worker registers
             under their company's standing team code — the GC's consent is
@@ -431,7 +426,7 @@ export default function AuthScreen({ t, lang, onDone }) {
       {verifying && (
         <Card>
           <GroupLabel>{t("enterCode")}</GroupLabel>
-          <Field label="Code" value={code} onChangeText={(x) => { setCode(x.replace(/[^0-9]/g, "").slice(0, 6)); setCodeErr(false); }} keyboardType="number-pad" autoCapitalize="none" placeholder="______" />
+          <Field value={code} onChangeText={(x) => { setCode(x.replace(/[^0-9]/g, "").slice(0, 6)); setCodeErr(false); }} keyboardType="number-pad" autoCapitalize="none" placeholder="______" />
           {codeErr && <Text style={s.err}>{t("codeWrong")}</Text>}
           <View style={{ gap: 10, marginTop: 12 }}>
             <Btn label={t("verify")} onPress={verifyCode} disabled={code.length !== 6} />

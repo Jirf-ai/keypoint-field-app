@@ -266,6 +266,33 @@ export function StackedFooter({ children }) {
   return <View style={s.footerStacked}>{children}</View>;
 }
 
+// ------------------------------------------------------------------ math strip
+// The "qty × cost → $total" ledger line shared by the Item and Hours forms.
+export function MathStrip({ left, amount }) {
+  return (
+    <View style={s.mathStrip}>
+      <Text style={s.mathLeft}>{left}</Text>
+      <Text style={type.moneyForm}>{amount}</Text>
+    </View>
+  );
+}
+
+// ------------------------------------------------------------------ notices
+// Inline notice card — the one surface for status messages across the app.
+// `tone`: "error" (red, blocks), "warn" (amber, saved-anyway), or "success"
+// (green, confirmation). Children are the caller's lines so each screen keeps
+// its own copy.
+export function NoticeCard({ tone = "error", title, children, style }) {
+  const box = tone === "warn" ? s.noticeWarn : tone === "success" ? s.noticeSuccess : s.noticeError;
+  const color = tone === "warn" ? colors.amber : tone === "success" ? colors.green : colors.red;
+  return (
+    <View style={[s.card, box, style]}>
+      {title ? <Text style={[s.noticeTitle, { color }]}>{title}</Text> : null}
+      {children}
+    </View>
+  );
+}
+
 // ------------------------------------------------------------------ status
 export function StatusPill({ label, color }) {
   return (
@@ -472,6 +499,14 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     gap: 8,
   },
+
+  mathStrip: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: colors.border, marginTop: 12, paddingTop: 10 },
+  mathLeft: { fontFamily: fonts.mono, fontSize: 12, fontWeight: "600", color: colors.textMuted, textTransform: "uppercase", letterSpacing: 0.5, fontVariant: ["tabular-nums"] },
+
+  noticeError: { borderColor: "#b91c1c33", backgroundColor: "#b91c1c0a" },
+  noticeWarn: { borderColor: "#a1620733", backgroundColor: "#a1620712" },
+  noticeSuccess: { borderColor: "#15803d33", backgroundColor: "#15803d0a" },
+  noticeTitle: { fontFamily: fonts.body, fontWeight: "700", marginBottom: 6, fontSize: 14 },
 
   statusPill: { borderRadius: radius.pill, paddingVertical: 3, paddingHorizontal: 8, alignSelf: "flex-start" },
   statusPillText: { fontFamily: fonts.mono, fontSize: 9.5, fontWeight: "700", letterSpacing: 0.76, textTransform: "uppercase" },

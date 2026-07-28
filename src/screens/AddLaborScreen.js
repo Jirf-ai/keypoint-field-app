@@ -1,14 +1,17 @@
 // + Hours — labor_entry (schema §4.4). Live math strip, segmented hour type,
 // collapsing pickers for trade/phase/area (open when there's nothing prefilled
 // from yesterday), sticky Cancel/Save footer. Rework stays blame-free: a missing
-// note warns AFTER saving, never blocks.
+// note warns AFTER saving, never blocks. Site managers can log hours on behalf
+// of crew who don't self-report ("record for someone else"). Opening with an
+// existing line in `editing` prefills the form and saves an append-only
+// correction (amendLine) instead of a new row.
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { Card, Field, FormScreen, GroupLabel, NumericField, PickerRow, Segmented, StickyFooter, preferred } from "../components/ui";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Card, Field, FormScreen, GroupLabel, MathStrip, NoticeCard, NumericField, PickerRow, Segmented, StickyFooter, preferred } from "../components/ui";
 import { phaseLabel } from "../i18n";
-import { HOUR_TYPES, PHASES, TRADES, areasFor, validateLabor, laborWarnings } from "../schema";
-import { activeLines, activeProfile, addLine, currentProject, getSettings } from "../store";
-import { colors, fonts, type } from "../theme";
+import { HOUR_TYPES, PHASES, TRADES, validateLabor, laborWarnings } from "../schema";
+import { activeLines, activeProfile, addLine, amendLine, currentAreas, getSettings } from "../store";
+import { colors, fonts } from "../theme";
 
 const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
 const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"]);
@@ -23,21 +26,27 @@ const FIX_KEYS = {
   V_worker: "worker",
 };
 
-export default function AddLaborScreen({ t, lang, workDate, onDone }) {
+export default function AddLaborScreen({ t, lang, workDate, onDone, editing }) {
   const st = getSettings();
   const me = activeProfile();
-  // The logged-in profile IS the worker — no name typing (Jeffrey 2026-07-24).
-  const worker = me?.display_name || st.recorded_by || "";
-  const [trade, setTrade] = useState(me?.default_trade ?? null);
-  const [hours, setHours] = useState("");
-  const [hourType, setHourType] = useState("regular");
-  const [rate, setRate] = useState(st.lastRate ?? "");
-  const [phase, setPhase] = useState(st.lastPhase);
-  const [area, setArea] = useState(st.lastArea);
-  const [note, setNote] = useState("");
+  const isSM = me?.role === "site_manager";
+  // The logged-in profile IS the worker by default — no name typing (Jeffrey
+  // 2026-07-24). Site managers can override to record for someone else.
+  const myName = me?.display_name || st.recorded_by || "";
+  const editingOther = !!editing && editing.worker !== myName;
+  const [forOther, setForOther] = useState(editingOther);
+  const [otherName, setOtherName] = useState(editingOther ? editing.worker : "");
+  const [trade, setTrade] = useState(editing?.trade ?? me?.default_trade ?? null);
+  const [hours, setHours] = useState(editing ? String(editing.hours ?? "") : "");
+  const [hourType, setHourType] = useState(editing?.hour_type ?? "regular");
+  const [rate, setRate] = useState(editing?.hourly_rate != null ? String(editing.hourly_rate) : (st.lastRate ?? ""));
+  const [phase, setPhase] = useState(editing?.phase ?? st.lastPhase);
+  const [area, setArea] = useState(editing?.area ?? st.lastArea);
+  const [note, setNote] = useState(editing?.note ?? "");
   const [errors, setErrors] = useState([]);
   const [warned, setWarned] = useState(null);
 
+  const worker = forOther ? otherName : myName;
   const total = Number(hours || 0) * Number(rate || 0);
 
   async function save() {
@@ -60,6 +69,11 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
       setErrors(blocks);
       return;
     }
+    if (editing) {
+      await amendLine(editing.line_id, entry);
+      onDone();
+      return;
+    }
     const warns = laborWarnings(entry, activeLines(workDate));
     await addLine(entry);
     if (warns.length && !warned) {
@@ -72,15 +86,17 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
 
   return (
     <FormScreen footer={<StickyFooter onCancel={onDone} cancelLabel={t("cancel")} primaryLabel={t("save")} onPrimary={save} />}>
+      {editing && (
+        <NoticeCard tone="warn" style={{ marginTop: 2 }}>
+          <Text style={s.editNote}>{t("editEntry")}</Text>
+        </NoticeCard>
+      )}
       <Card>
         <View style={s.numRow}>
           <NumericField label={t("hours")} value={hours} onChangeText={(x) => setHours(x.replace(/[^0-9.]/g, ""))} placeholder="0" style={{ flex: 1 }} />
           <NumericField label={t("rate")} value={rate} onChangeText={(x) => setRate(x.replace(/[^0-9.]/g, ""))} placeholder="0" style={{ flex: 1 }} />
         </View>
-        <View style={s.mathStrip}>
-          <Text style={s.mathLeft}>{hours || "0"} × {rate || "0"}</Text>
-          <Text style={type.moneyForm}>${total.toLocaleString("en-US", { maximumFractionDigits: 2 })}</Text>
-        </View>
+        <MathStrip left={`${hours || "0"} × ${rate || "0"}`} amount={`$${total.toLocaleString("en-US", { maximumFractionDigits: 2 })}`} />
       </Card>
 
       <Card>
@@ -108,24 +124,36 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
             renderLabel={(p) => phaseLabel(p, lang)}
             show={4}
           />
-          <PickerRow label={t("area")} value={area} displayValue={area} options={areasFor(currentProject()?.name)} onChange={setArea} show={6} />
+          <PickerRow label={t("area")} value={area} displayValue={area} options={currentAreas()} onChange={setArea} show={6} />
         </View>
+
+        {/* Site managers can log for a crew member who isn't recording their own
+            hours; everyone else records as themselves. */}
+        {isSM && (
+          <View style={{ marginTop: 14 }}>
+            <Pressable onPress={() => setForOther((v) => !v)} hitSlop={6} accessibilityRole="button">
+              <Text style={s.link}>{forOther ? `↩ ${t("recordingAs")} ${myName}` : t("forSomeoneElse")}</Text>
+            </Pressable>
+            {forOther && (
+              <Field label={t("worker")} value={otherName} onChangeText={setOtherName} placeholder="—" style={{ marginTop: 10 }} />
+            )}
+          </View>
+        )}
 
         <Field label={t("note")} value={note} onChangeText={setNote} autoCapitalize="sentences" style={{ marginTop: 14 }} placeholder="—" />
       </Card>
 
       {errors.length > 0 && (
-        <Card style={s.errCard}>
-          <Text style={s.errTitle}>{t("needFix")}</Text>
+        <NoticeCard tone="error" title={t("needFix")}>
           {errors.map((e) => (
             <Text key={e} style={s.errItem}>• {t(FIX_KEYS[e] ?? e)}</Text>
           ))}
-        </Card>
+        </NoticeCard>
       )}
       {warned && (
-        <Card style={s.warnCard}>
+        <NoticeCard tone="warn">
           <Text style={s.warnText}>{t(warned)}</Text>
-        </Card>
+        </NoticeCard>
       )}
     </FormScreen>
   );
@@ -133,20 +161,9 @@ export default function AddLaborScreen({ t, lang, workDate, onDone }) {
 
 const s = StyleSheet.create({
   numRow: { flexDirection: "row", gap: 9 },
-  mathStrip: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    marginTop: 12,
-    paddingTop: 10,
-  },
-  mathLeft: { fontFamily: fonts.mono, fontSize: 12, fontWeight: "600", color: colors.textMuted, textTransform: "uppercase", letterSpacing: 0.5, fontVariant: ["tabular-nums"] },
   reworkNote: { fontFamily: fonts.body, color: colors.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 8 },
-  errCard: { borderColor: "#b91c1c33", backgroundColor: "#b91c1c0a" },
-  errTitle: { fontFamily: fonts.body, color: colors.red, fontWeight: "700", marginBottom: 6, fontSize: 14 },
+  link: { fontFamily: fonts.body, fontSize: 13.5, fontWeight: "700", color: colors.accent },
+  editNote: { fontFamily: fonts.body, color: colors.amber, fontSize: 13.5, fontWeight: "600" },
   errItem: { fontFamily: fonts.body, color: colors.red, fontSize: 14, lineHeight: 21 },
-  warnCard: { borderColor: "#a1620733", backgroundColor: "#a1620712" },
   warnText: { fontFamily: fonts.body, color: colors.amber, fontSize: 14, lineHeight: 20 },
 });
