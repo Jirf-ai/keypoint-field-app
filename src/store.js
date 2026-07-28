@@ -230,15 +230,17 @@ export async function saveSettings(patch) {
 }
 
 // ------------------------------------------------------------------ profiles
-export async function createProfile({ display_name, default_trade, lang, selfie_uri, phone, role, gc }) {
+export async function createProfile({ worker_id, display_name, default_trade, lang, selfie_uri, phone, phone_verified, role, gc }) {
   const p = {
-    worker_id: uuid(),
+    // worker_id may be pre-allocated (OTP signup) so the local profile matches
+    // the server-side worker_registrations row; otherwise generate one.
+    worker_id: worker_id ?? uuid(),
     display_name,
     default_trade: default_trade ?? null,
     preferred_language: lang ?? "en",
     selfie_uri: selfie_uri ?? null,
-    phone: phone ?? null,          // verified via OTP at public release
-    phone_verified: false,
+    phone: phone ?? null,          // OTP-verified when phone_verified is true
+    phone_verified: phone_verified ?? false,
     // schema §4.8 role — drives which interface the worker gets (site
     // managers run the daily log; crew log their own hours + photos).
     role: role ?? "journeyman",
@@ -247,6 +249,35 @@ export async function createProfile({ display_name, default_trade, lang, selfie_
     gc_account_id: gc?.gc_account_id ?? null,
     gc_code: gc?.gc_code ?? null,
     gc_business: gc?.business_name ?? null,
+    active: true,
+    created_at: new Date().toISOString(),
+  };
+  state.profiles.push(p);
+  return await logIn(p.worker_id);
+}
+
+// Cross-device login: restore a phone-verified account from the server onto this
+// device and log into it. The selfie stays on the original device (privacy +
+// size) — the worker re-takes it here if they want a face on the crew log.
+export async function restoreProfile(account, phone) {
+  const existing = state.profiles.find((x) => x.worker_id === account.worker_id);
+  if (existing) {
+    existing.phone_verified = true;
+    if (phone && !existing.phone) existing.phone = phone;
+    return await logIn(existing.worker_id);
+  }
+  const p = {
+    worker_id: account.worker_id,
+    display_name: account.display_name,
+    default_trade: account.trade ?? null,
+    preferred_language: state.settings.lang ?? "en",
+    selfie_uri: null,
+    phone: phone ?? null,
+    phone_verified: true,
+    role: account.role ?? "journeyman",
+    gc_account_id: account.gc_account_id ?? null,
+    gc_code: account.gc_code ?? null,
+    gc_business: account.gc_business ?? null,
     active: true,
     created_at: new Date().toISOString(),
   };
