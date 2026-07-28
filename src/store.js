@@ -6,7 +6,7 @@
 // sync idempotent.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
-import { todayStr } from "./schema";
+import { areasFor, todayStr } from "./schema";
 
 const KEY = "kaicon-field:v1";
 
@@ -41,7 +41,7 @@ const EMPTY = {
   photos: [],
   change_orders: [],
   days: {},           // `${project_id}:${work_date}` -> {status, submitted_at, submitted_by}
-  settings: { lang: "en", recorded_by: "", lastPhase: null, lastArea: null },
+  settings: { lang: "en", recorded_by: "", lastPhase: null, lastArea: null, wifiOnlyPhotos: false },
 };
 
 export async function load() {
@@ -171,14 +171,18 @@ export function myProjects() {
 }
 
 // Site manager creates a project. Client-generated id keeps future sync
-// idempotent; the new project is selected immediately.
-export async function addOwnedProject({ name, address, status }) {
+// idempotent; the new project is selected immediately. Custom areas (optional)
+// give this project its own constrained tag list; empty falls back to the
+// generic residential set (schema §4.1 — areas are project-configured).
+export async function addOwnedProject({ name, address, status, areas }) {
   const me = activeProfile();
+  const cleanAreas = (areas ?? []).map((a) => a.trim()).filter(Boolean);
   const p = {
     id: uuid(),
     name: (name || "").trim(),
     address: (address || "").trim() || null,
     status: status || "active",
+    areas: cleanAreas.length ? cleanAreas : null,
     owner_id: me?.worker_id ?? null,
     created_by: me?.display_name ?? null,
     created_at: new Date().toISOString(),
@@ -186,6 +190,16 @@ export async function addOwnedProject({ name, address, status }) {
   state.owned_projects = [p, ...(state.owned_projects ?? [])];
   await setCurrentProject(p); // persists
   return p;
+}
+
+// The area tag list for the current project: the manager's configured areas if
+// they set any, otherwise the phase/name-derived residential fallback. Used by
+// every capture form so area tagging always comes from a constrained list.
+export function currentAreas() {
+  const cur = state?.current_project;
+  const owned = (state?.owned_projects ?? []).find((p) => p.id === cur?.id);
+  if (owned?.areas?.length) return owned.areas;
+  return areasFor(cur?.name);
 }
 
 // Crew joins a manager's list by code. Resolves the code to a profile on this
@@ -302,6 +316,9 @@ export async function amendLine(line_id, patch) {
   });
   delete next.superseded_by;
   state.lines.push(next);
+  // Correcting a locked day marks it amended (PRD §5.1), same as adding to one.
+  const day = state.days[dayKey(next.work_date)];
+  if (day && day.status === "submitted") day.status = "amended";
   await persist();
   return next;
 }
@@ -356,6 +373,11 @@ export function activeLines(work_date) {
   return state.lines.filter(
     (l) => l.work_date === work_date && !l.superseded_by && l.project_id === pid
   );
+}
+
+// The current (non-superseded) line by id — used to prefill the edit form.
+export function lineById(line_id) {
+  return state.lines.find((l) => l.line_id === line_id && !l.superseded_by) ?? null;
 }
 
 export function photosFor(work_date) {

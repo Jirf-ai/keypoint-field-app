@@ -17,25 +17,20 @@ import {
   todayTotals,
 } from "../store";
 import { colors, fonts, type } from "../theme";
+import { dateStamp } from "../util";
 
-function datePlate(workDate, lang) {
-  const locale = lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US";
-  const d = new Date(workDate + "T12:00:00");
-  const wd = d.toLocaleDateString(locale, { weekday: "short" }).toUpperCase().replace(".", "");
-  const mo = d.toLocaleDateString(locale, { month: "short" }).toUpperCase().replace(".", "");
-  return `${wd} ${d.getDate()} ${mo} ${d.getFullYear()}`;
-}
-
-export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, onFillPhoto, onProjectChange }) {
+export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, onFillPhoto, onEditLine, onProjectChange }) {
   const project = currentProject();
   const lines = activeLines(workDate);
   const photos = photosFor(workDate);
   const totals = todayTotals(workDate);
   const status = dayStatus(workDate);
-  const isSM = activeProfile()?.role === "site_manager";
+  const me = activeProfile();
+  const isSM = me?.role === "site_manager";
+  const myName = me?.display_name;
   const inbox = isSM ? photos.filter((p) => !p.line_id) : [];
 
-  const dateLabel = datePlate(workDate, lang);
+  const dateLabel = dateStamp(workDate, lang);
   const statusTag = status !== "draft" ? `  ·  ${t(status === "amended" ? "amended" : "submitted")}` : "";
 
   const tiles = [
@@ -125,9 +120,9 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
                 <Text style={type.moneyRollup}>{usd(totals.money)}</Text>
               </View>
               <View style={s.rollupMeta}>
-                <Text style={s.metaLine}>{totals.count} {totals.count === 1 ? "LINE" : "LINES"}</Text>
-                <Text style={s.metaLine}>{Number(totals.hours).toFixed(1)} HRS</Text>
-                {photos.length ? <Text style={s.metaLine}>{photos.length} {photos.length === 1 ? "PHOTO" : "PHOTOS"}</Text> : null}
+                <Text style={s.metaLine}>{totals.count} {t("statLines").toUpperCase()}</Text>
+                <Text style={s.metaLine}>{Number(totals.hours).toFixed(1)} {t("statHours").toUpperCase()}</Text>
+                {photos.length ? <Text style={s.metaLine}>{photos.length} {t("statPhotos").toUpperCase()}</Text> : null}
               </View>
             </View>
             {lines.map((l) => {
@@ -137,7 +132,17 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
                 : Number(l.qty || 0) * Number(l.unit_cost || 0);
               const title = isLabor ? `${l.worker} · ${l.hours}h` : l.description;
               const meta = `${phaseLabel(l.phase, lang)} · ${l.area}${!isLabor && l.qty ? ` · ${l.qty} ${l.unit}` : ""}`;
-              return <LedgerRow key={l.line_id} cls={l.cost_class} title={title} meta={meta} amount={usdCents(amount)} />;
+              const row = <LedgerRow cls={l.cost_class} title={title} meta={meta} amount={usdCents(amount)} />;
+              // SM corrects any line; crew only their own hours. Corrections are
+              // append-only — tapping opens the form prefilled (see amendLine).
+              const canEdit = onEditLine && (isSM || (isLabor && l.worker === myName));
+              return canEdit ? (
+                <Pressable key={l.line_id} onPress={() => onEditLine(l)} accessibilityRole="button" accessibilityLabel={`${t("edit")} · ${title}`}>
+                  {row}
+                </Pressable>
+              ) : (
+                <View key={l.line_id}>{row}</View>
+              );
             })}
           </Card>
         )}

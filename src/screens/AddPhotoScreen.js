@@ -9,17 +9,19 @@ import { File, Paths } from "expo-file-system";
 import * as Location from "expo-location";
 import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, PickerRow, StickyFooter, preferred } from "../components/ui";
 import { phaseLabel } from "../i18n";
-import { PHASES, areasFor, photoFilename } from "../schema";
-import { activeLines, addPhoto, currentProject, nextPhotoSeq } from "../store";
+import { PHASES, photoFilename } from "../schema";
+import { activeLines, addPhoto, currentAreas, getSettings, nextPhotoSeq } from "../store";
 import { colors, fonts, type } from "../theme";
 
 const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"]);
 
 export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
+  const st = getSettings();
   const [assets, setAssets] = useState([]); // pending, NOT saved yet
   const [caption, setCaption] = useState("");
-  const [phase, setPhase] = useState(null);
-  const [area, setArea] = useState(null);
+  // Auto-tag phase/area with the day's last-used values (PRD §5.1); overridable.
+  const [phase, setPhase] = useState(st.lastPhase);
+  const [area, setArea] = useState(st.lastArea);
   const [lineId, setLineId] = useState(null);
   const [err, setErr] = useState(null);
 
@@ -141,11 +143,11 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
       </Card>
 
       <Card>
-        <Field label="Caption" value={caption} onChangeText={setCaption} autoCapitalize="sentences" placeholder="What does it show?" />
+        <Field label={t("caption")} value={caption} onChangeText={setCaption} autoCapitalize="sentences" placeholder="—" />
         <GroupLabel style={{ marginTop: 14 }}>{t("phase")}</GroupLabel>
         <ChipWall options={PHASE_ORDER} value={phase} onChange={setPhase} renderLabel={(p) => phaseLabel(p, lang)} show={4} />
         <GroupLabel style={{ marginTop: 14 }}>{t("area")}</GroupLabel>
-        <ChipWall options={areasFor(currentProject()?.name)} value={area} onChange={setArea} show={6} />
+        <ChipWall options={currentAreas()} value={area} onChange={setArea} show={6} />
         {lines.length > 0 && (
           <View style={{ marginTop: 6 }}>
             <PickerRow

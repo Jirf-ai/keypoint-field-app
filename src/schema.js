@@ -28,6 +28,20 @@ export const PROJECT = {
 // §2 cost classification. Labor lives on its own sheet/entry type (always L).
 export const COST_CLASSES = ["M", "F", "E", "S"];
 
+// Sensible cost_class default by phase (PRD Appendix #2 mitigation: "required
+// field, single tap, sensible default by phase"). Most residential line items
+// are bulk material (M) — so M is the fallback, and only the phases that are
+// clearly fixture- or equipment-led get a different nudge. Always a suggestion,
+// never a lock: the user can retap the grid. Keeps 100% cost_class coverage
+// without making the crew think about classification on a typical line.
+const PHASE_CLASS = {
+  mobilization: "E", demo: "E",           // temp power, dumpsters, rentals
+  hvac: "F", windows_doors: "F", fixtures: "F", // installed as-is
+};
+export function defaultClassForPhase(phase) {
+  return PHASE_CLASS[phase] ?? "M";
+}
+
 // §7 phases — default residential sequence + the 1257 gazebo parallel track.
 export const PHASES = [
   "mobilization", "demo", "foundation", "framing", "roofing",

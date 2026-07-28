@@ -3,17 +3,11 @@
 // big total, a mono stat strip, then one row per cost class (§2.5).
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { parseProject } from "../components/ProjectPicker";
-import { ClassBadge, FormScreen, GroupLabel, StickyFooter, usdCents } from "../components/ui";
+import { ClassBadge, FormScreen, GroupLabel, Muted, NoticeCard, StickyFooter, usdCents } from "../components/ui";
 import { CLASS_LABELS, colors, fonts, type } from "../theme";
 import { activeLines, currentProject, dayStatus, photosFor, submitDay, todayTotals } from "../store";
 import { syncNow } from "../sync";
-
-function dateLine(workDate) {
-  const d = new Date(workDate + "T12:00:00");
-  const wd = d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-  const mo = d.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
-  return `${wd} ${d.getDate()} ${mo} ${d.getFullYear()}`;
-}
+import { dateStamp } from "../util";
 
 function Stat({ label, value, zero }) {
   return (
@@ -24,7 +18,7 @@ function Stat({ label, value, zero }) {
   );
 }
 
-export default function ReviewScreen({ t, workDate, onDone }) {
+export default function ReviewScreen({ t, lang, workDate, onDone }) {
   const totals = todayTotals(workDate);
   const lines = activeLines(workDate);
   const photos = photosFor(workDate);
@@ -44,7 +38,7 @@ export default function ReviewScreen({ t, workDate, onDone }) {
       footer={<StickyFooter onCancel={onDone} cancelLabel={t("cancel")} primaryLabel={status === "draft" ? t("submitDay") : t("submitted")} onPrimary={submit} tone="green" disabled={status !== "draft"} />}
     >
       <View style={s.card}>
-        <Text style={s.metaLine}>{dateLine(workDate)}  ·  {code}</Text>
+        <Text style={s.metaLine}>{dateStamp(workDate, lang)}  ·  {code}</Text>
         <Text style={s.big}>{usdCents(totals.money)}</Text>
 
         <View style={s.stripRow}>
@@ -62,10 +56,9 @@ export default function ReviewScreen({ t, workDate, onDone }) {
         ))}
       </View>
 
-      <View style={s.notice}>
-        <Text style={s.noticeLabel}>{t("thisLocksDay")}</Text>
-        <Text style={s.noticeBody}>{t("lockBody")}</Text>
-      </View>
+      <NoticeCard tone="warn" title={t("thisLocksDay")}>
+        <Muted>{t("lockBody")}</Muted>
+      </NoticeCard>
     </FormScreen>
   );
 }
@@ -80,8 +73,4 @@ const s = StyleSheet.create({
   statValue: { fontFamily: fonts.mono, fontSize: 18, fontWeight: "700", color: colors.text, marginTop: 3, fontVariant: ["tabular-nums"] },
   classRow: { flexDirection: "row", alignItems: "center", gap: 11, borderTopWidth: 1, borderTopColor: colors.border, marginTop: 14, paddingTop: 12 },
   className: { flex: 1, fontFamily: fonts.body, fontSize: 14, fontWeight: "600", color: colors.text },
-
-  notice: { backgroundColor: "#a1620712", borderWidth: 1, borderColor: "#a1620733", borderRadius: 12, marginHorizontal: 14, padding: 14 },
-  noticeLabel: { fontFamily: fonts.mono, fontSize: 10, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase", color: colors.amber },
-  noticeBody: { fontFamily: fonts.body, fontSize: 13, lineHeight: 19, color: colors.textSecondary, marginTop: 6 },
 });

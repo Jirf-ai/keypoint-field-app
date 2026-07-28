@@ -4,9 +4,10 @@
 // on this device also finds its standing team code here (locked to the
 // account; copy to hand to the crew — workers can't register without it).
 import { useState } from "react";
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { Btn, Card, Field, GroupLabel, Muted, StackedFooter } from "../components/ui";
 import { PROJECT } from "../schema";
+import { copyToClipboard } from "../util";
 import { activeProfile, gcAccount, getSettings, saveSettings } from "../store";
 import { colors, fonts, type } from "../theme";
 
@@ -23,6 +24,7 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
   const [name, setName] = useState(st.recorded_by || me?.display_name || "");
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [wifiOnly, setWifiOnly] = useState(!!st.wifiOnlyPhotos);
   const gc = gcAccount();
 
   function changeName(x) {
@@ -30,17 +32,16 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
     saveSettings({ recorded_by: x.trim() });
   }
 
+  function toggleWifi(v) {
+    setWifiOnly(v);
+    saveSettings({ wifiOnlyPhotos: v });
+  }
+
   async function copyCode(code) {
-    try {
-      if (Platform.OS === "web" && navigator?.clipboard) {
-        await navigator.clipboard.writeText(code);
-      } else {
-        const Clipboard = require("react-native").Clipboard;
-        Clipboard?.setString?.(code);
-      }
+    if (await copyToClipboard(code)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
-    } catch { /* code stays visible + selectable */ }
+    }
   }
 
   return (
@@ -49,7 +50,7 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
         {/* identity */}
         <Card>
           {editing ? (
-            <Field label="Your name" value={name} onChangeText={changeName} placeholder="Your name" />
+            <Field label={t("nameLabel")} value={name} onChangeText={changeName} placeholder="—" />
           ) : (
             <View style={s.idRow}>
               {me?.selfie_uri ? (
@@ -58,7 +59,7 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
                 <View style={[s.avatar, s.avatarEmpty]}><Text style={s.avatarInitial}>{(name || "?")[0]}</Text></View>
               )}
               <View style={{ flex: 1 }}>
-                <Text style={s.idLabel}>YOUR NAME</Text>
+                <Text style={s.idLabel}>{t("nameLabel").toUpperCase()}</Text>
                 <Text style={s.idName}>{name || "—"}</Text>
               </View>
               <Pressable onPress={() => setEditing(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t("edit")}>
@@ -66,6 +67,17 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
               </Pressable>
             </View>
           )}
+        </Card>
+
+        {/* preferences — data-plan protection for crew on personal devices */}
+        <Card>
+          <View style={s.prefRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.prefLabel}>{t("wifiOnly")}</Text>
+              <Muted style={{ marginTop: 3 }}>{t("wifiOnlyHint")}</Muted>
+            </View>
+            <Switch value={wifiOnly} onValueChange={toggleWifi} trackColor={{ false: "rgba(42,38,34,0.14)", true: colors.ink }} thumbColor="#ffffff" />
+          </View>
         </Card>
 
         {/* GC team code — standing, locked to the registered company account
@@ -127,6 +139,9 @@ const s = StyleSheet.create({
   idLabel: { fontFamily: fonts.mono, fontSize: 9.5, fontWeight: "600", letterSpacing: 1.33, textTransform: "uppercase", color: colors.label },
   idName: { fontFamily: fonts.body, fontSize: 17, fontWeight: "700", color: colors.text, marginTop: 2 },
   edit: { fontFamily: fonts.body, fontSize: 14, fontWeight: "700", color: colors.accent },
+
+  prefRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  prefLabel: { fontFamily: fonts.body, fontSize: 15, fontWeight: "700", color: colors.text },
 
   gcBiz: { fontFamily: fonts.body, fontSize: 15.5, fontWeight: "700", color: colors.text, marginTop: 4, marginBottom: 8 },
   codeBig: {

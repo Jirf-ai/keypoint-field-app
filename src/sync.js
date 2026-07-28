@@ -8,8 +8,10 @@
 // the legacy video-log table) — but this module never needs to know; it just
 // speaks the sync-field-log request shape.
 import { File } from "expo-file-system";
+import NetInfo from "@react-native-community/netinfo";
 import { call } from "./api";
 import {
+  getSettings,
   markSynced,
   pendingByProject,
   pendingCount,
@@ -44,6 +46,12 @@ async function run() {
     if (res.ok && res.synced) await markSynced(res.synced, res.synced_at);
     else if (!res.ok) throw new Error(`sync ${res.status}`);
   }
+  // Wi-Fi-only gate (PRD §9.1 — crew personal data plans). Rows synced above are
+  // tiny; photos are the bandwidth cost. If the crew opted into Wi-Fi-only and
+  // we're on cellular, hold the photos — they stay pending and ride the next
+  // sync once there's Wi-Fi. No data is lost, only deferred.
+  if (getSettings().wifiOnlyPhotos && (await onCellular())) return pendingCount();
+
   // …then photos, binary included, a few at a time.
   for (const [project_id, photos] of Object.entries(pendingPhotosByProject())) {
     for (let i = 0; i < photos.length; i += PHOTO_CHUNK) {
@@ -54,6 +62,17 @@ async function run() {
     }
   }
   return pendingCount();
+}
+
+// True only when we're sure the connection is cellular — unknown/wifi/ethernet
+// (and web, where there's no cellular concept) never hold photos back.
+async function onCellular() {
+  try {
+    const st = await NetInfo.fetch();
+    return st?.type === "cellular";
+  } catch {
+    return false;
+  }
 }
 
 // Client rows carry local-only fields; the server whitelists anyway, but the

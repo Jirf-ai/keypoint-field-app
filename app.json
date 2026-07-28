@@ -38,6 +38,12 @@
         }
       ],
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Kaicon Field uses the camera to scan material barcodes into the daily log."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",

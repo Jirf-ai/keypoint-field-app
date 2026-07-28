@@ -97,6 +97,9 @@ export default function App() {
   // Photo-first flow: an inbox photo tapped on Today opens the material form
   // with the photo attached (linked to the new line on save).
   const [fromPhoto, setFromPhoto] = useState(null);
+  // Edit flow: a ledger row tapped on Today opens its capture form prefilled;
+  // saving writes an append-only correction (amendLine), never an overwrite.
+  const [editLine, setEditLine] = useState(null);
   // Projects drawer (Option A) — opened from the header avatar.
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -148,9 +151,21 @@ export default function App() {
   const done = () => {
     setTick(tick + 1);
     setFromPhoto(null);
+    setEditLine(null);
     setScreen("today");
   };
-  const nav = (name) => setScreen(name);
+  const editLineNav = (l) => {
+    setFromPhoto(null);
+    setEditLine(l);
+    setScreen(l.kind === "labor" ? "labor" : "item");
+  };
+  // Generic navigation always starts a clean screen; the edit/photo entries set
+  // their own state first and call setScreen directly, so they're unaffected.
+  const nav = (name) => {
+    setEditLine(null);
+    setFromPhoto(null);
+    setScreen(name);
+  };
   const pending = pendingCount();
   const authed = !!profile;
   // All the worker's projects for the drawer: current + owned/joined + recents,
@@ -234,18 +249,20 @@ export default function App() {
             onSync={() => syncNow().then(() => setTick((x) => x + 1))}
             nav={nav}
             onFillPhoto={(p) => {
+              setEditLine(null);
               setFromPhoto(p);
               setScreen("item");
             }}
+            onEditLine={editLineNav}
             onProjectChange={() => setTick(tick + 1)}
           />
         )}
         {authed && screen === "item" && (
-          <AddItemScreen t={t} lang={lang} workDate={workDate} onDone={done} fromPhoto={fromPhoto} />
+          <AddItemScreen t={t} lang={lang} workDate={workDate} onDone={done} fromPhoto={fromPhoto} editing={editLine} />
         )}
-        {authed && screen === "labor" && <AddLaborScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
+        {authed && screen === "labor" && <AddLaborScreen t={t} lang={lang} workDate={workDate} onDone={done} editing={editLine} />}
         {authed && screen === "photo" && <AddPhotoScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
-        {authed && screen === "review" && <ReviewScreen t={t} workDate={workDate} onDone={done} />}
+        {authed && screen === "review" && <ReviewScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
         {authed && screen === "cos" && <ChangeOrdersScreen t={t} workDate={workDate} onDone={done} />}
         {authed && screen === "addproject" && <AddProjectScreen t={t} onDone={done} />}
         {authed && screen === "joinlist" && <JoinListScreen t={t} onDone={done} />}
