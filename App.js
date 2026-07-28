@@ -11,6 +11,7 @@ import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
 import { activeProfile, currentProject, getSettings, load, logOut, myProjects, myShareCode, pendingCount, recentProjects, saveSettings, setCurrentProject } from "./src/store";
 import { refreshLocation } from "./src/location";
+import { syncReminders } from "./src/notifications";
 import { syncNow } from "./src/sync";
 import AuthScreen from "./src/screens/AuthScreen";
 import AddItemScreen from "./src/screens/AddItemScreen";
@@ -138,6 +139,7 @@ export default function App() {
     if (!ready || !profile || screen !== "today") return;
     syncNow().then(() => setTick((x) => x + 1));
     refreshLocation(); // warm the cache so line entries carry a recent fix
+    syncReminders();   // re-arm the end-of-day nudge; drops today's once logged
   }, [ready, profile, screen]);
 
   useEffect(() => {

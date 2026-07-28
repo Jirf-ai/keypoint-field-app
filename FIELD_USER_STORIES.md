@@ -132,7 +132,7 @@ the PRD fenced off. Built items marked ✅.
 
 ### H — Crew self-service & motivation
 - **CS-01 ⭐ ✅** Crew sees **their own hours this week** (day + type + project breakdown).
-- **CS-02 ⭐** **End-of-day reminder** if they haven't logged.
+- **CS-02 ⭐ ✅** **End-of-day reminder** if they haven't logged.
 - **CS-03** Browse **my photos** for a project.
 
 ### I — Foreman oversight & completeness
@@ -165,6 +165,21 @@ get AC when scheduled.
 - [x] Week = the calendar week (Mon–Sun) containing today; localized weekday labels.
 - [x] Zero state reads "No hours logged this week yet."
 - [x] Read-only; header back closes it. es/zh complete.
+
+### CS-02 — End-of-day reminder ✅ (built)
+> As a crew member, I want a reminder if I haven't logged, so submission becomes
+> a habit (drives the ≥90%-of-days-logged metric).
+
+- [x] Opt-in **Settings** toggle "Remind me to log at end of day" + a reminder
+      time (chips: 15:00–19:00). Native only; hidden on web.
+- [x] Enabling requests OS notification permission; if withheld, the toggle
+      reverts and points the user to their phone settings.
+- [x] Local only (no backend/push): a rolling 7-day window of one-shot reminders
+      at the chosen time, re-synced whenever the app is used.
+- [x] **Today's reminder is dropped** the moment the worker logs hours (or if its
+      time has already passed) — no nudge once done.
+- [x] Notification title/body localized; Android channel + config plugin set.
+- [x] Turning it off cancels all scheduled reminders.
 
 ### DL-01 — Log a material delivery
 > As a site manager, I want to log a delivery by photographing the packing slip,

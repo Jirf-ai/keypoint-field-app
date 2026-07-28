@@ -4,11 +4,14 @@
 // on this device also finds its standing team code here (locked to the
 // account; copy to hand to the crew — workers can't register without it).
 import { useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import { Btn, Card, Field, GroupLabel, Muted, StackedFooter } from "../components/ui";
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Btn, Card, ChipWall, Field, GroupLabel, Muted, StackedFooter } from "../components/ui";
 import { PROJECT } from "../schema";
 import { copyToClipboard } from "../util";
+import { syncReminders } from "../notifications";
 import { activeProfile, gcAccount, getSettings, saveSettings } from "../store";
+
+const REMINDER_TIMES = ["15:00", "16:00", "17:00", "18:00", "19:00"];
 import { colors, fonts, type } from "../theme";
 
 const SPEC = [
@@ -25,6 +28,9 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [wifiOnly, setWifiOnly] = useState(!!st.wifiOnlyPhotos);
+  const [remind, setRemind] = useState(!!st.remindEndOfDay);
+  const [remindTime, setRemindTime] = useState(st.reminderTime || "17:00");
+  const [remindDenied, setRemindDenied] = useState(false);
   const gc = gcAccount();
 
   function changeName(x) {
@@ -35,6 +41,25 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
   function toggleWifi(v) {
     setWifiOnly(v);
     saveSettings({ wifiOnlyPhotos: v });
+  }
+
+  async function toggleReminder(v) {
+    setRemind(v);
+    setRemindDenied(false);
+    await saveSettings({ remindEndOfDay: v });
+    const ok = await syncReminders();
+    // Enabled but the OS withheld permission → revert and point them to Settings.
+    if (v && !ok) {
+      setRemind(false);
+      await saveSettings({ remindEndOfDay: false });
+      setRemindDenied(true);
+    }
+  }
+
+  async function pickTime(x) {
+    setRemindTime(x);
+    await saveSettings({ reminderTime: x });
+    syncReminders();
   }
 
   async function copyCode(code) {
@@ -69,7 +94,7 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
           )}
         </Card>
 
-        {/* preferences — data-plan protection for crew on personal devices */}
+        {/* preferences — data-plan protection + the end-of-day reminder */}
         <Card>
           <View style={s.prefRow}>
             <View style={{ flex: 1 }}>
@@ -78,6 +103,26 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
             </View>
             <Switch value={wifiOnly} onValueChange={toggleWifi} trackColor={{ false: "rgba(42,38,34,0.14)", true: colors.ink }} thumbColor="#ffffff" />
           </View>
+
+          {/* Local reminders are native only. */}
+          {Platform.OS !== "web" && (
+            <>
+              <View style={s.prefDivider} />
+              <View style={s.prefRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.prefLabel}>{t("remindLog")}</Text>
+                  <Muted style={{ marginTop: 3 }}>{t("remindHint")}</Muted>
+                </View>
+                <Switch value={remind} onValueChange={toggleReminder} trackColor={{ false: "rgba(42,38,34,0.14)", true: colors.ink }} thumbColor="#ffffff" />
+              </View>
+              {remind && (
+                <View style={{ marginTop: 12 }}>
+                  <ChipWall options={REMINDER_TIMES} value={remindTime} onChange={pickTime} show={5} mono />
+                </View>
+              )}
+              {remindDenied && <Muted style={{ marginTop: 8, color: colors.amber }}>{t("remindDenied")}</Muted>}
+            </>
+          )}
         </Card>
 
         {/* GC team code — standing, locked to the registered company account
@@ -142,6 +187,7 @@ const s = StyleSheet.create({
 
   prefRow: { flexDirection: "row", alignItems: "center", gap: 14 },
   prefLabel: { fontFamily: fonts.body, fontSize: 15, fontWeight: "700", color: colors.text },
+  prefDivider: { height: 1, backgroundColor: colors.border, marginVertical: 14 },
 
   gcBiz: { fontFamily: fonts.body, fontSize: 15.5, fontWeight: "700", color: colors.text, marginTop: 4, marginBottom: 8 },
   codeBig: {

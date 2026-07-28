@@ -42,7 +42,7 @@ const EMPTY = {
   photos: [],
   change_orders: [],
   days: {},           // `${project_id}:${work_date}` -> {status, submitted_at, submitted_by}
-  settings: { lang: "en", recorded_by: "", lastPhase: null, lastArea: null, wifiOnlyPhotos: false },
+  settings: { lang: "en", recorded_by: "", lastPhase: null, lastArea: null, wifiOnlyPhotos: false, remindEndOfDay: false, reminderTime: "17:00" },
 };
 
 export async function load() {
@@ -481,6 +481,15 @@ function weekDays(refStr) {
     out.push(`${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`);
   }
   return out;
+}
+
+// Did the active worker log any of their own hours today? Drives the end-of-day
+// reminder (CS-02) — no nudge once they've logged.
+export function loggedLaborToday(refDate = todayStr()) {
+  const name = activeProfile()?.display_name;
+  return state.lines.some(
+    (l) => l.kind === "labor" && !l.superseded_by && l.worker === name && l.work_date === refDate && Number(l.hours || 0) > 0
+  );
 }
 
 // The active worker's own hours for the week containing refDate — the thing the
