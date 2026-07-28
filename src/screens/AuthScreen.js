@@ -33,7 +33,10 @@ function formatPhone(v) {
 
 export default function AuthScreen({ t, lang, onDone }) {
   const existing = profiles();
-  const [creating, setCreating] = useState(existing.length === 0);
+  // Fresh device opens on the worker/contractor chooser; a device that already
+  // has worker profiles skips straight to the log-in hub (their faces).
+  const [chooser, setChooser] = useState(existing.length === 0);
+  const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState(null);
@@ -351,6 +354,41 @@ export default function AuthScreen({ t, lang, onDone }) {
     );
   }
 
+  // ---- entry chooser: crew worker vs contractor (GC) ----
+  // Routes to the worker signup or the GC path, so the GC entry never sits as an
+  // always-there tab on the worker screens.
+  if (chooser) {
+    return (
+      <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
+        <View style={s.head}>
+          <Text style={type.screenTitle}>{t("chooserTitle")}</Text>
+          <Text style={s.headSub}>{t("chooserSub")}</Text>
+        </View>
+        <Pressable onPress={() => { setChooser(false); setCreating(true); }} accessibilityRole="button" accessibilityLabel={t("workerChoice")}>
+          <Card style={s.choiceCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.choiceTitle}>{t("workerChoice")}</Text>
+              <Text style={s.choiceSub}>{t("workerChoiceSub")}</Text>
+            </View>
+            <Text style={s.choiceChevron}>›</Text>
+          </Card>
+        </Pressable>
+        <Pressable onPress={() => { setChooser(false); setGcMode(gc ? "code" : "register"); }} accessibilityRole="button" accessibilityLabel={t("gcChoice")}>
+          <Card style={s.choiceCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.choiceTitle}>🏗  {t("gcChoice")}</Text>
+              <Text style={s.choiceSub}>{t("gcChoiceSub")}</Text>
+            </View>
+            <Text style={s.choiceChevron}>›</Text>
+          </Card>
+        </Pressable>
+        <Pressable onPress={() => { setChooser(false); setCreating(false); }} hitSlop={8} accessibilityRole="button" style={s.backLinkWrap}>
+          <Text style={s.backLink}>{t("haveAccount")}</Text>
+        </Pressable>
+      </ScrollView>
+    );
+  }
+
   // ---- GC: register the company ----
   if (gcMode === "register") {
     return (
@@ -379,7 +417,7 @@ export default function AuthScreen({ t, lang, onDone }) {
         <View style={{ paddingHorizontal: 14, gap: 10 }}>
           <Btn label={t("gcRegister")} onPress={gcRegister} disabled={busy || !gcBiz.trim() || !gcPhone.trim() || !gcEmail.trim() || !gcConsent} />
           <Btn label={t("gcLoginTab")} onPress={() => { setGcErr(null); setGcMode("login"); }} variant="outline" />
-          <Btn label={t("cancel")} onPress={() => { setGcErr(null); setGcMode(null); }} variant="outline" />
+          <Btn label={t("cancel")} onPress={() => { setGcErr(null); setGcMode(null); setChooser(true); }} variant="outline" />
         </View>
       </ScrollView>
     );
@@ -400,7 +438,7 @@ export default function AuthScreen({ t, lang, onDone }) {
         </Card>
         <View style={{ paddingHorizontal: 14, gap: 10 }}>
           <Btn label={t("logIn")} onPress={gcLogin} disabled={busy || !teamCode.trim() || !gcPhone.trim()} />
-          <Btn label={t("cancel")} onPress={() => { setGcErr(null); setGcMode(null); }} variant="outline" />
+          <Btn label={t("cancel")} onPress={() => { setGcErr(null); setGcMode(null); setChooser(true); }} variant="outline" />
         </View>
       </ScrollView>
     );
@@ -455,9 +493,8 @@ export default function AuthScreen({ t, lang, onDone }) {
         <View style={{ paddingHorizontal: 14, gap: 10 }}>
           {/* Fresh device: phone login is how you actually get in — lead with it. */}
           {existing.length === 0 && <Btn label={`📱  ${t("loginWithPhone")}`} onPress={() => setPhoneLogin(true)} />}
-          <Btn label={t("createAccount")} onPress={() => setCreating(true)} variant="outline" />
+          <Btn label={t("createAccount")} onPress={() => setChooser(true)} variant="outline" />
           {existing.length > 0 && <Btn label={`📱  ${t("loginWithPhone")}`} onPress={() => setPhoneLogin(true)} variant="outline" />}
-          <Btn label={`🏗  ${t("gcEntry")}`} onPress={() => setGcMode(gc ? "code" : "register")} variant="outline" />
         </View>
       </ScrollView>
     );
@@ -556,10 +593,9 @@ export default function AuthScreen({ t, lang, onDone }) {
             onPress={create}
             disabled={busy || !role || !name.trim() || !teamCode.trim() || !selfie || (isCrew && mgrCode.trim().length < 4)}
           />
-          <Btn label={`🏗  ${t("gcEntry")}`} onPress={() => setGcMode(gc ? "code" : "register")} variant="outline" />
-          {/* Login lives on the log-in hub, not here — one quiet way back. */}
-          <Pressable onPress={() => setCreating(false)} hitSlop={8} accessibilityRole="button" style={s.backLinkWrap}>
-            <Text style={s.backLink}>{t("haveAccount")}</Text>
+          {/* Back to the crew/contractor chooser (which also has "Log in"). */}
+          <Pressable onPress={() => setChooser(true)} hitSlop={8} accessibilityRole="button" style={s.backLinkWrap}>
+            <Text style={s.backLink}>‹ {t("back")}</Text>
           </Pressable>
         </View>
       )}
@@ -572,6 +608,10 @@ const s = StyleSheet.create({
   headSub: { fontFamily: fonts.body, fontSize: 14, color: colors.textMuted, marginTop: 4 },
   backLinkWrap: { alignItems: "center", paddingVertical: 8, marginTop: 2 },
   backLink: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "700", color: colors.accent },
+  choiceCard: { flexDirection: "row", alignItems: "center", gap: 12 },
+  choiceTitle: { fontFamily: fonts.body, fontSize: 16.5, fontWeight: "700", color: colors.text },
+  choiceSub: { fontFamily: fonts.body, fontSize: 13.5, color: colors.textMuted, marginTop: 3, lineHeight: 18 },
+  choiceChevron: { color: colors.accent, fontSize: 24, fontWeight: "800" },
 
   roleGrid: { flexDirection: "row", gap: 8 },
   roleBtn: { flex: 1, minHeight: 50, borderRadius: 8, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" },
