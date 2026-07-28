@@ -65,11 +65,18 @@ export default function ProjectPicker({ t, current, recents, onSelect, role, dat
     onSelect(p);
   }
 
-  const recentList = current ? [current, ...recents.filter((r) => r.id !== current.id)] : recents;
   const meta = current ? parseProject(current) : null;
   const isSM = role === "site_manager";
   const mine = myProjects();
   const shareCode = myShareCode();
+
+  // One deduped switch list: current first, then your/team projects, then any
+  // recents not already shown. Same project never appears twice.
+  const seen = new Set();
+  const switchList = [];
+  for (const p of [current, ...mine, ...recents]) {
+    if (p && !seen.has(p.id)) { seen.add(p.id); switchList.push(p); }
+  }
 
   function act(cb) {
     setOpen(false);
@@ -92,29 +99,23 @@ export default function ProjectPicker({ t, current, recents, onSelect, role, dat
       {open && (
         <Card style={s.drop}>
           <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 460 }}>
-            {/* Site managers add projects; crew join a manager's list by code. */}
-            {isSM ? (
-              <Pressable style={s.action} onPress={() => act(onAddProject)} accessibilityRole="button" accessibilityLabel={t("addProject")}>
-                <Text style={s.actionText}>+ {t("addProject")}</Text>
-              </Pressable>
-            ) : (
-              <Pressable style={s.action} onPress={() => act(onJoin)} accessibilityRole="button" accessibilityLabel={t("joinList")}>
-                <Text style={s.actionText}>{t("joinList")} ▸</Text>
-              </Pressable>
-            )}
-            {isSM && shareCode ? (
-              <Text style={s.shareLine}>{t("shareCodeInline")} <Text style={s.shareCode}>{shareCode}</Text></Text>
-            ) : null}
-
-            {mine.length > 0 && (
+            {/* The switch list — the reason you opened this. One row per project,
+                current pinned to the top and marked. */}
+            {switchList.length > 0 && (
               <>
-                <Text style={[type.groupLabel, { marginTop: 14, marginBottom: 6 }]}>{isSM ? t("yourProjects") : t("teamProjects")}</Text>
-                {mine.map((p) => {
+                <Text style={[type.groupLabel, { marginBottom: 2 }]}>{isSM ? t("yourProjects") : t("teamProjects")}</Text>
+                {switchList.map((p) => {
                   const m = parseProject(p);
                   const isCur = p.id === current?.id;
                   return (
-                    <Pressable key={p.id} style={s.recentRow} onPress={() => pick(p)} accessibilityRole="button">
-                      <Text style={[s.recentName, isCur && { fontWeight: "700" }]} numberOfLines={1}>{p.name}</Text>
+                    <Pressable key={p.id} style={s.recentRow} onPress={() => pick(p)} accessibilityRole="button" accessibilityLabel={m.display}>
+                      <View style={s.rowLeft}>
+                        {isCur ? <View style={s.dot} /> : <View style={s.dotHole} />}
+                        <View style={{ flex: 1 }}>
+                          <Text style={[s.recentName, isCur && { fontWeight: "700" }]} numberOfLines={1}>{m.display}</Text>
+                          {isCur && m.city ? <Text style={s.rowSub} numberOfLines={1}>{m.city}</Text> : null}
+                        </View>
+                      </View>
                       <Text style={type.projectCode}>{m.code}</Text>
                     </Pressable>
                   );
@@ -122,45 +123,44 @@ export default function ProjectPicker({ t, current, recents, onSelect, role, dat
               </>
             )}
 
-            <View style={{ marginTop: 16 }}>
-              <Field label={t("projectAddressLabel")} value={q} onChangeText={setQ} autoCapitalize="none" placeholder={t("typeAddress")} />
-            </View>
-            {q.trim().length >= 3 && !searching && (
-              <Text style={s.count}>
-                {results.length} {results.length === 1 ? t("matchOne") : t("matchMany")} · {t("searchingRecords")}
-              </Text>
-            )}
-            {searching && <ActivityIndicator style={{ marginTop: 12 }} color={colors.accent} />}
-            {results.map((p) => {
-              const m = parseProject(p);
-              return (
-                <Pressable key={p.id} style={s.resultCard} onPress={() => pick(p)} accessibilityRole="button" accessibilityLabel={m.display}>
-                  <View style={s.resultRow1}>
-                    <Text style={type.projectCode}>{m.code}</Text>
-                    {p.status ? <StatusPill label={p.status} color={statusColor(p.status)} /> : null}
-                  </View>
-                  <Text style={s.resultName}>{m.display}</Text>
-                  <Text style={s.resultAddr}>{m.address}</Text>
+            {/* Find / add group — search, live results, then the join/add link. */}
+            <View style={switchList.length > 0 ? s.findGroup : null}>
+              <Field label={t("findProject")} value={q} onChangeText={setQ} autoCapitalize="none" placeholder={t("typeAddress")} />
+              {q.trim().length >= 3 && !searching && (
+                <Text style={s.count}>
+                  {results.length} {results.length === 1 ? t("matchOne") : t("matchMany")} · {t("searchingRecords")}
+                </Text>
+              )}
+              {searching && <ActivityIndicator style={{ marginTop: 12 }} color={colors.accent} />}
+              {results.map((p) => {
+                const m = parseProject(p);
+                return (
+                  <Pressable key={p.id} style={s.resultCard} onPress={() => pick(p)} accessibilityRole="button" accessibilityLabel={m.display}>
+                    <View style={s.resultRow1}>
+                      <Text style={type.projectCode}>{m.code}</Text>
+                      {p.status ? <StatusPill label={p.status} color={statusColor(p.status)} /> : null}
+                    </View>
+                    <Text style={s.resultName}>{m.display}</Text>
+                    <Text style={s.resultAddr}>{m.address}</Text>
+                  </Pressable>
+                );
+              })}
+              {noHit && <Muted style={{ marginTop: 12 }}>{t("noProjectFound")}</Muted>}
+
+              {/* Site managers add projects; crew join a manager's list by code. */}
+              {isSM ? (
+                <Pressable style={s.linkAction} onPress={() => act(onAddProject)} accessibilityRole="button" accessibilityLabel={t("addProject")}>
+                  <Text style={s.linkActionText}>+ {t("addProject")}</Text>
                 </Pressable>
-              );
-            })}
-            {noHit && <Muted style={{ marginTop: 12 }}>{t("noProjectFound")}</Muted>}
-
-            {recentList.length > 0 && (
-              <>
-                <Text style={[type.groupLabel, { marginTop: 16, marginBottom: 6 }]}>{t("recentProjects")}</Text>
-                {recentList.map((p) => {
-                  const m = parseProject(p);
-                  const isCur = p.id === current?.id;
-                  return (
-                    <Pressable key={p.id} style={s.recentRow} onPress={() => pick(p)} accessibilityRole="button">
-                      <Text style={[s.recentName, isCur && { fontWeight: "700" }]} numberOfLines={1}>{m.display}</Text>
-                      <Text style={type.projectCode}>{m.code}</Text>
-                    </Pressable>
-                  );
-                })}
-              </>
-            )}
+              ) : (
+                <Pressable style={s.linkAction} onPress={() => act(onJoin)} accessibilityRole="button" accessibilityLabel={t("joinList")}>
+                  <Text style={s.linkActionText}>{t("joinList")} ▸</Text>
+                </Pressable>
+              )}
+              {isSM && shareCode ? (
+                <Text style={s.shareLine}>{t("shareCodeInline")} <Text style={s.shareCode}>{shareCode}</Text></Text>
+              ) : null}
+            </View>
           </ScrollView>
         </Card>
       )}
@@ -184,18 +184,9 @@ const s = StyleSheet.create({
   slotTitle: { fontFamily: fonts.display, fontSize: 17, fontWeight: "700", color: colors.accent },
   slotSub: { fontFamily: fonts.body, fontSize: 12.5, color: colors.textMuted, marginTop: 3, textAlign: "center" },
   drop: { marginTop: 8 },
-  action: {
-    minHeight: 46,
-    borderRadius: radius.input,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "rgba(217,90,31,0.5)",
-    backgroundColor: "#d95a1f0d",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-  },
-  actionText: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "700", color: colors.accent },
+  findGroup: { marginTop: 18, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border },
+  linkAction: { minHeight: 40, alignItems: "center", justifyContent: "center", marginTop: 12 },
+  linkActionText: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "700", color: colors.accent },
   shareLine: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, marginTop: 8, textAlign: "center" },
   shareCode: { fontFamily: fonts.mono, fontSize: 12, fontWeight: "700", color: colors.accent },
   count: { fontFamily: fonts.body, fontSize: 11.5, color: colors.textMuted, marginTop: 10, marginBottom: 2 },
@@ -219,5 +210,9 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  recentName: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "600", color: colors.text, flex: 1 },
+  rowLeft: { flexDirection: "row", alignItems: "center", gap: 9, flex: 1 },
+  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent },
+  dotHole: { width: 7, height: 7 },
+  recentName: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "600", color: colors.text },
+  rowSub: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, marginTop: 1 },
 });
