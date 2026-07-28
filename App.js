@@ -10,6 +10,7 @@ import ProjectsDrawer from "./src/components/ProjectsDrawer";
 import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
 import { activeProfile, currentProject, getSettings, load, logOut, myProjects, myShareCode, pendingCount, recentProjects, saveSettings, setCurrentProject } from "./src/store";
+import { refreshLocation } from "./src/location";
 import { syncNow } from "./src/sync";
 import AuthScreen from "./src/screens/AuthScreen";
 import AddItemScreen from "./src/screens/AddItemScreen";
@@ -134,6 +135,7 @@ export default function App() {
   useEffect(() => {
     if (!ready || !profile || screen !== "today") return;
     syncNow().then(() => setTick((x) => x + 1));
+    refreshLocation(); // warm the cache so line entries carry a recent fix
   }, [ready, profile, screen]);
 
   useEffect(() => {

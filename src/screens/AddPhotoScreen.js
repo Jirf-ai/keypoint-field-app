@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { File, Paths } from "expo-file-system";
-import * as Location from "expo-location";
+import { refreshLocation } from "../location";
 import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, PickerRow, StickyFooter, preferred } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { PHASES, photoFilename } from "../schema";
@@ -50,22 +50,10 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
     setAssets((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-  async function grabGps() {
-    if (Platform.OS === "web") return null;
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return null;
-      const pos = (await Location.getLastKnownPositionAsync()) ?? (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
-      if (!pos) return null;
-      return { gps_lat: Number(pos.coords.latitude.toFixed(6)), gps_lng: Number(pos.coords.longitude.toFixed(6)) };
-    } catch {
-      return null;
-    }
-  }
-
   async function upload() {
     if (!assets.length) return;
-    const gps = await grabGps();
+    // Force a fresh fix for the geotag (also warms the cache for line stamps).
+    const gps = await refreshLocation({ maxAgeMs: 0 });
     let seq = nextPhotoSeq(workDate);
     for (const a of assets) {
       const filename = photoFilename(workDate, seq++);

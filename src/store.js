@@ -7,6 +7,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { areasFor, todayStr } from "./schema";
+import { lastLocation } from "./location";
 
 const KEY = "kaicon-field:v1";
 
@@ -88,6 +89,10 @@ async function doPersist() {
 
 function stamp(entry) {
   return {
+    // Location provenance (PRD §7): brand every record with the last known fix.
+    // Spread first so an explicit gps on the entry (a photo's precise geotag)
+    // always wins over the cached line-level fix.
+    ...(lastLocation() ?? {}),
     ...entry,
     project_id: state.current_project?.id ?? null,   // Records uuid
     project_name: state.current_project?.name ?? null,
