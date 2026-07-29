@@ -11,6 +11,7 @@ import {
   crewLogStatus,
   currentProject,
   dayStatus,
+  incidentsFor,
   myWeekHours,
   photosFor,
   recentProjects,
@@ -43,6 +44,8 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
   ];
   if (isSM) tiles.push({ key: "item", glyph: "📦", label: t("tileItem"), tone: "ink" });
 
+  // Safety records for the day — everyone sees them (SF-02).
+  const incidents = incidentsFor(workDate);
   const hasEntries = lines.length > 0 || photos.length > 0;
   // Crew get their own week back for logging (CS-01) — the adoption lever.
   const week = !isSM ? myWeekHours() : null;
@@ -84,6 +87,33 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
       <View style={{ marginTop: 12 }}>
         <CaptureTiles tiles={tiles} disabled={!project} onPress={(k) => nav(k)} />
       </View>
+
+      {/* SF-02 — every role, one tap from Today, never behind a menu. Sits
+          apart from the capture tiles because it is not a cost record. */}
+      {project && (
+        <Pressable
+          onPress={() => nav("incident")}
+          style={({ pressed }) => [s.incidentBtn, pressed && { opacity: 0.85 }]}
+          accessibilityRole="button"
+          accessibilityLabel={t("incidentReport")}
+        >
+          <Text style={s.incidentGlyph}>⚠️</Text>
+          <Text style={s.incidentLabel}>{t("incidentReport")}</Text>
+        </Pressable>
+      )}
+
+      {incidents.length > 0 && (
+        <Card style={{ marginTop: 12 }}>
+          <GroupLabel>{t("incidentsToday")}</GroupLabel>
+          {incidents.map((i) => (
+            <View key={i.incident_id} style={s.incRow}>
+              <Text style={s.incType}>{t(`incident_${i.incident_type}`)}</Text>
+              <Text style={s.incDesc} numberOfLines={2}>{i.description}</Text>
+              <Text style={s.incBy}>{i.reported_by}</Text>
+            </View>
+          ))}
+        </Card>
+      )}
 
       {/* Crew guide — the two duties as an orange-numbered list. */}
       {!isSM && project && !hasEntries && (
@@ -212,6 +242,25 @@ const s = StyleSheet.create({
     paddingHorizontal: 11,
   },
   pendingText: { fontFamily: fonts.mono, color: colors.amber, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase" },
+  incidentBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginHorizontal: 14,
+    marginTop: 8,
+    minHeight: 46,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#b91c1c33",
+    backgroundColor: "#b91c1c0a",
+  },
+  incidentGlyph: { fontSize: 15 },
+  incidentLabel: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "700", color: colors.red },
+  incRow: { borderTopWidth: 1, borderTopColor: colors.border, paddingVertical: 10 },
+  incType: { fontFamily: fonts.mono, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase", color: colors.red },
+  incDesc: { fontFamily: fonts.body, fontSize: 14, fontWeight: "600", color: colors.text, marginTop: 3, lineHeight: 19 },
+  incBy: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   guideRow: { flexDirection: "row", gap: 10, marginTop: 4, alignItems: "flex-start" },
   guideNum: { fontFamily: fonts.mono, color: colors.accent, fontSize: 12, fontWeight: "700", width: 22, lineHeight: 22 },
   guideText: { fontFamily: fonts.body, color: colors.text, fontSize: 14, fontWeight: "600", lineHeight: 22, flex: 1 },

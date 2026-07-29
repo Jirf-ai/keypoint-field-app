@@ -21,6 +21,7 @@ import AddProjectScreen from "./src/screens/AddProjectScreen";
 import JoinListScreen from "./src/screens/JoinListScreen";
 import ChangeOrdersScreen from "./src/screens/ChangeOrdersScreen";
 import CrewScreen from "./src/screens/CrewScreen";
+import IncidentScreen from "./src/screens/IncidentScreen";
 import MyHoursScreen from "./src/screens/MyHoursScreen";
 import ReviewScreen from "./src/screens/ReviewScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
@@ -86,6 +87,7 @@ const TITLES = {
   joinlist: "joinListTitle",
   myhours: "myHours",
   crew: "crewTitle",
+  incident: "incidentNavTitle",
 };
 
 export default function App() {
@@ -273,6 +275,7 @@ export default function App() {
         {authed && screen === "review" && <ReviewScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
         {authed && screen === "myhours" && <MyHoursScreen t={t} lang={lang} />}
         {authed && screen === "crew" && <CrewScreen t={t} lang={lang} workDate={workDate} />}
+        {authed && screen === "incident" && <IncidentScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
         {authed && screen === "cos" && <ChangeOrdersScreen t={t} workDate={workDate} onDone={done} />}
         {authed && screen === "addproject" && <AddProjectScreen t={t} onDone={done} />}
         {authed && screen === "joinlist" && <JoinListScreen t={t} onDone={done} />}

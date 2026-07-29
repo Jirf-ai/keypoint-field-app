@@ -42,6 +42,9 @@ async function run() {
       items: g.items.map(stripLocal),
       labor: g.labor.map(stripLocal),
       change_orders: g.change_orders.map(stripLocal),
+      // Incidents ride the rows pass (before photos) so an incident photo's
+      // incident_id FK resolves server-side on the very next chunk.
+      incidents: g.incidents.map(stripLocal),
     });
     if (res.ok && res.synced) await markSynced(res.synced, res.synced_at);
     else if (!res.ok) throw new Error(`sync ${res.status}`);

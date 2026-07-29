@@ -41,6 +41,7 @@ const EMPTY = {
   lines: [],          // items + labor, append-only ({kind: 'item'|'labor'})
   photos: [],
   change_orders: [],
+  incidents: [],      // SF-02 safety records — any role, append-only
   days: {},           // `${project_id}:${work_date}` -> {status, submitted_at, submitted_by}
   settings: { lang: "en", recorded_by: "", lastPhase: null, lastArea: null, wifiOnlyPhotos: false, remindEndOfDay: false, reminderTime: "17:00" },
 };
@@ -380,6 +381,32 @@ export async function linkPhoto(photo_id, line_id) {
   return p;
 }
 
+// SF-02 — file an incident / near-miss. Every role can; nothing about it is
+// gated on the site manager's day, and it deliberately does NOT flip the day to
+// "amended" (a safety report is not an edit to the cost log). Append-only like
+// everything else: a correction would arrive as a new row with `supersedes`.
+export async function addIncident(inc) {
+  const me = activeProfile();
+  const rec = stamp({
+    incident_id: uuid(),
+    reported_by: me?.display_name ?? state.settings.recorded_by ?? "unknown",
+    reporter_worker_id: me?.worker_id ?? null,
+    ...inc,
+  });
+  state.incidents.push(rec);
+  await persist();
+  return rec;
+}
+
+// Incidents for a day on the current project. Everyone sees the site's safety
+// record — an incident is not private the way another worker's wage is.
+export function incidentsFor(work_date) {
+  const pid = state.current_project?.id;
+  return (state.incidents ?? []).filter(
+    (i) => i.work_date === work_date && !i.superseded_by && i.project_id === pid
+  );
+}
+
 export async function addChangeOrder(co) {
   const rec = stamp({ co_id: uuid(), status: "pending", ...co });
   state.change_orders.push(rec);
@@ -430,7 +457,8 @@ export function pendingCount() {
   return (
     state.lines.filter((l) => !l.synced_at).length +
     state.photos.filter((p) => !p.synced_at).length +
-    state.change_orders.filter((c) => !c.synced_at).length
+    state.change_orders.filter((c) => !c.synced_at).length +
+    (state.incidents ?? []).filter((i) => !i.synced_at).length
   );
 }
 
@@ -441,12 +469,15 @@ export function pendingCount() {
 export function pendingByProject() {
   const groups = {};
   const g = (pid) =>
-    (groups[pid] ??= { days: [], items: [], labor: [], change_orders: [] });
+    (groups[pid] ??= { days: [], items: [], labor: [], change_orders: [], incidents: [] });
   for (const l of state.lines.filter((x) => !x.synced_at && x.project_id)) {
     g(l.project_id)[l.kind === "labor" ? "labor" : "items"].push(l);
   }
   for (const c of state.change_orders.filter((x) => !x.synced_at && x.project_id)) {
     g(c.project_id).change_orders.push(c);
+  }
+  for (const i of (state.incidents ?? []).filter((x) => !x.synced_at && x.project_id)) {
+    g(i.project_id).incidents.push(i);
   }
   // Day statuses ride along for any project already being synced (idempotent
   // upsert server-side, so re-sending submit status every time is harmless).
@@ -472,9 +503,11 @@ export async function markSynced(echo, ts) {
   const items = new Set([...(echo?.items ?? []), ...(echo?.labor ?? [])]);
   const photos = new Set(echo?.photos ?? []);
   const cos = new Set(echo?.change_orders ?? []);
+  const incs = new Set(echo?.incidents ?? []);
   for (const l of state.lines) if (items.has(l.line_id)) l.synced_at = ts;
   for (const p of state.photos) if (photos.has(p.photo_id)) p.synced_at = ts;
   for (const c of state.change_orders) if (cos.has(c.co_id)) c.synced_at = ts;
+  for (const i of state.incidents ?? []) if (incs.has(i.incident_id)) i.synced_at = ts;
   await persist();
 }
 
