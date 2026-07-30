@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { parseProject } from "./ProjectPicker";
 import { colors, fonts, radius, type } from "../theme";
+import { copyToClipboard } from "../util";
 
 const ROLE_PILL = {
   site_manager: { label: "site mgr", color: "#d95a1f", bg: "#d95a1f1c" },
@@ -17,6 +18,7 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
   // Render only while open/animating; JS-driven animation (RN-web ignores the
   // native driver, and native-driver transforms wouldn't reliably hide it).
   const [mounted, setMounted] = useState(open);
+  const [copied, setCopied] = useState(false);
   const x = useRef(new Animated.Value(-W)).current;
   const fade = useRef(new Animated.Value(0)).current;
 
@@ -62,7 +64,25 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
               <Text style={s.name} numberOfLines={1}>{name}</Text>
               <View style={[s.pill, { backgroundColor: pill.bg }]}><Text style={[s.pillText, { color: pill.color }]}>{pill.label}</Text></View>
             </View>
-            {isSM && shareCode ? <Text style={s.share}>Share code · {shareCode}</Text> : null}
+            {isSM && shareCode ? (
+              <View style={s.shareRow}>
+                <Text style={s.share}>{t("shareCodeInline")} · {shareCode}</Text>
+                <Pressable
+                  hitSlop={8}
+                  style={s.copyChip}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("copyCode")}
+                  onPress={async () => {
+                    if (await copyToClipboard(shareCode)) {
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1600);
+                    }
+                  }}
+                >
+                  <Text style={s.copyChipText}>{copied ? `✓ ${t("copiedCode")}` : `⧉ ${t("copyCode")}`}</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -123,7 +143,10 @@ const s = StyleSheet.create({
   name: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "800", color: colors.text, flexShrink: 1 },
   pill: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 7 },
   pillText: { fontFamily: fonts.mono, fontSize: 9, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase" },
-  share: { fontFamily: fonts.mono, fontSize: 10, color: colors.textMuted, marginTop: 3 },
+  share: { fontFamily: fonts.mono, fontSize: 10, color: colors.textMuted },
+  shareRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 },
+  copyChip: { borderWidth: 1, borderColor: "#d95a1f55", borderRadius: 999, paddingVertical: 2, paddingHorizontal: 7, backgroundColor: "#d95a1f0d" },
+  copyChipText: { fontFamily: fonts.body, fontSize: 10, fontWeight: "700", color: colors.accent },
 
   lbl: { ...type.groupLabel, marginTop: 14, marginBottom: 4 },
   emptyText: { fontFamily: fonts.body, fontSize: 13, color: colors.textMuted, paddingVertical: 12 },
