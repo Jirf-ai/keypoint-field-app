@@ -15,21 +15,6 @@
 // real texts with no code change and no redeploy.
 export const REQUIRE_PHONE_VERIFICATION = true;
 
-// §4.1 project — the pilot. v1 is one project at a time (PRD §4 non-goals).
-export const PROJECT = {
-  project_id: "1257-INSP",
-  name: "Bao Residence — 1257 Inspiration Point",
-  address: "1257 Inspiration Point, West Covina, CA 91791",
-  apn: "8493-056-020",
-  permits: ["B25-1199", "B25-1200"],
-  gc_of_record: "L'Or Constructions Inc.",
-  gc_license: "CSLB #1156094",
-  pm_entity: "KPKB OC LLC",
-  start_date: "2026-07-30",
-  areas: ["Main 1F", "Main 2F", "Gazebo", "Sitework"],
-  budget_by_class: { M: 55734.88, F: 0, L: 133006.0, E: 0, S: 4550.0 },
-};
-
 // §2 cost classification. Labor lives on its own sheet/entry type (always L).
 export const COST_CLASSES = ["M", "F", "E", "S"];
 
@@ -47,7 +32,7 @@ export function defaultClassForPhase(phase) {
   return PHASE_CLASS[phase] ?? "M";
 }
 
-// §7 phases — default residential sequence + the 1257 gazebo parallel track.
+// §7 phases — default residential sequence (+ gazebo for detached structures).
 export const PHASES = [
   "mobilization", "demo", "foundation", "framing", "roofing",
   "rough_electrical", "rough_plumbing", "hvac", "inspection_rough",
@@ -83,16 +68,22 @@ export const TRADES = [
 
 export const HOUR_TYPES = ["regular", "overtime", "rework"];
 
-// Areas are project-configured (schema §4.1). The 1257 pilot has its own; any
-// other Records project falls back to a generic residential set until per-
-// project config syncs from the backend.
+// Areas are project-configured (schema §4.1). A site manager's own areas (set on
+// the owned project) win in store.currentAreas(); anything unconfigured falls
+// back to this generic residential set until per-project config syncs.
 export const DEFAULT_AREAS = ["Interior", "Exterior", "Garage", "Sitework"];
-export function areasFor(projectName) {
-  const n = (projectName ?? "").toLowerCase();
-  if (n.includes("1257") || n.includes("bao") || n.includes("inspiration")) {
-    return PROJECT.areas;
-  }
+export function areasFor(_projectName) {
   return DEFAULT_AREAS;
+}
+
+// Derive a short project code from a Records/owned project name. Address-style
+// names ("123 Main St, City") → "123-MAI"; anything else → first alnum chars.
+export function projectCode(name) {
+  const street = String(name ?? "").split(",")[0].trim();
+  const m = street.match(/^(\d+)\s+([A-Za-z]+)/);
+  return m
+    ? `${m[1]}-${m[2].slice(0, 3).toUpperCase()}`
+    : street.replace(/[^A-Za-z0-9]/g, "").slice(0, 6).toUpperCase() || "PROJ";
 }
 
 // SF-02 — incident / near-miss types. A constrained enum (not free text) so
