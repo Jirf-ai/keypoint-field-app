@@ -9,7 +9,7 @@ import LaunchSplash, { LogoRow } from "./src/components/LaunchSplash";
 import ProjectsDrawer from "./src/components/ProjectsDrawer";
 import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
-import { activeProfile, currentProject, getSettings, load, logOut, myProjects, myShareCode, pendingCount, recentProjects, saveSettings, setCurrentProject } from "./src/store";
+import { activeProfile, clearAllLocal, currentProject, getSettings, load, logOut, myProjects, myShareCode, pendingCount, recentProjects, saveSettings, setCurrentProject } from "./src/store";
 import { refreshLocation } from "./src/location";
 import { syncReminders } from "./src/notifications";
 import { onSyncActivity, syncNow } from "./src/sync";
@@ -292,6 +292,12 @@ export default function App() {
               await logOut();
               setProfile(null);
               setScreen("today");
+            }}
+            onWipe={async () => {
+              await clearAllLocal();
+              setProfile(null);
+              setDrawerOpen(false);
+              setScreen("today"); // auth gate takes over — no profile on this device
             }}
           />
         )}

@@ -14,9 +14,13 @@ import { activeProfile, currentProject, gcAccount, getSettings, myProjects, save
 const REMINDER_TIMES = ["15:00", "16:00", "17:00", "18:00", "19:00"];
 import { colors, fonts, type } from "../theme";
 
-export default function SettingsScreen({ t, onDone, onLogout }) {
+export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
   const me = activeProfile();
   const st = getSettings();
+  // Two-tap arm for the device wipe: the first tap reveals the warning + a
+  // confirm button, the second tap actually erases. No native confirm dialog
+  // (they don't render on RN-web and block automation).
+  const [wipeArmed, setWipeArmed] = useState(false);
   const [name, setName] = useState(st.recorded_by || me?.display_name || "");
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -168,6 +172,22 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
                 </View>
               </View>
             ) : null}
+          </Card>
+        )}
+
+        {/* Wipe this device — profiles, projects, captured lines/photos, the lot.
+            For handing a test/demo device to the next person. Two-tap confirm. */}
+        {onWipe && (
+          <Card>
+            <Muted style={{ marginBottom: 12 }}>{t("deleteLocalHint")}</Muted>
+            {wipeArmed ? (
+              <View style={{ gap: 10 }}>
+                <Btn label={t("deleteLocalConfirm")} onPress={onWipe} variant="destructive" />
+                <Btn label={t("cancel")} onPress={() => setWipeArmed(false)} variant="outline" />
+              </View>
+            ) : (
+              <Btn label={t("deleteLocalData")} onPress={() => setWipeArmed(true)} variant="destructive" />
+            )}
           </Card>
         )}
       </ScrollView>
