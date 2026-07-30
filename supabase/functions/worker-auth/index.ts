@@ -16,6 +16,13 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 //       When `worker` is present (signup) the worker is registered/attached to
 //       the phone as verified. `accounts` are the verified worker profiles on
 //       this phone — the client restores one to log in on a new device.
+//   roster     { gc_code }
+//     → { ok, workers: [ { worker_id, display_name, role, trade } ] }
+//       Everyone registered under the team code — the SM's pick-a-crew-member
+//       list for record-for-someone-else (SM-14/SM-15: hard identity, no
+//       spelling drift). Keyed to the semi-secret gc_code, the same
+//       consent-bearing credential registration itself requires; phones are
+//       never returned.
 //
 // Real SMS is a flip: set TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM secrets and the
 // code is texted instead of returned. Codes are hashed at rest and expire.
@@ -190,5 +197,21 @@ Deno.serve(async (req) => {
     return json({ ok: true, verified: true, phone, accounts, gc });
   }
 
-  return json({ error: "action must be send-otp | verify-otp" }, 400);
+  if (action === "roster") {
+    // Punctuation-blind: crew-facing codes are typed letters/numbers only —
+    // "GAUYGK6" and "GAU-YGK6" both resolve (pilot-scale scan).
+    const bare = String(body.gc_code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!bare) return json({ ok: false, error: "gc_code is required" }, 400);
+    const { data: gcs } = await supabase.from("gc_accounts")
+      .select("id, gc_code").eq("status", "active");
+    const gc = (gcs ?? []).find((g) => String(g.gc_code).toUpperCase().replace(/[^A-Z0-9]/g, "") === bare);
+    if (!gc) return json({ ok: false, error: "unknown team code" }, 404);
+    const { data: regs } = await supabase.from("worker_registrations")
+      .select("worker_id, display_name, role, trade")
+      .eq("gc_account_id", gc.id).eq("phone_verified", true)
+      .order("display_name");
+    return json({ ok: true, workers: regs ?? [] });
+  }
+
+  return json({ error: "action must be send-otp | verify-otp | roster" }, 400);
 });

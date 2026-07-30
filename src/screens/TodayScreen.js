@@ -2,8 +2,10 @@
 // a capture tile row (§2.2), then the day reads as a ledger (§2.5). Role decides
 // the surface: crew log hours + photos; site managers add materials, review,
 // submit, and raise change orders.
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef } from "react";
+import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import ProjectPicker from "../components/ProjectPicker";
+import { isSyncing } from "../sync";
 import { Btn, Card, CaptureTiles, EmptyState, GroupLabel, LedgerRow, Muted, usd, usdCents } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import {
@@ -11,6 +13,8 @@ import {
   crewLogStatus,
   currentProject,
   dayStatus,
+  daySubmittedAt,
+  incidentsFor,
   myWeekHours,
   photosFor,
   recentProjects,
@@ -20,6 +24,27 @@ import {
 } from "../store";
 import { colors, fonts, type } from "../theme";
 import { dateStamp } from "../util";
+
+// Small spinning brand diamond + "updating" — lives inside the pending badge
+// while a sync drain is running, so a crew member knows the app is actively
+// sending (wait) rather than stuck (Jeffrey, 2026-07-30).
+function UpdatingSpinner({ t }) {
+  const rot = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(rot, { toValue: 1, duration: 1100, easing: Easing.linear, useNativeDriver: false }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [rot]);
+  const rotate = rot.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+  return (
+    <View style={s.updatingRow}>
+      <Animated.Text style={[s.updatingDiamond, { transform: [{ rotate }] }]}>◆</Animated.Text>
+      <Text style={s.updatingText}>{t("updating")}</Text>
+    </View>
+  );
+}
 
 export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, onFillPhoto, onEditLine, onProjectChange }) {
   const project = currentProject();
@@ -43,6 +68,8 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
   ];
   if (isSM) tiles.push({ key: "item", glyph: "📦", label: t("tileItem"), tone: "ink" });
 
+  // Safety records for the day — everyone sees them (SF-02).
+  const incidents = incidentsFor(workDate);
   const hasEntries = lines.length > 0 || photos.length > 0;
   // Crew get their own week back for logging (CS-01) — the adoption lever.
   const week = !isSM ? myWeekHours() : null;
@@ -78,12 +105,40 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
       {pending > 0 && (
         <Pressable style={s.pending} onPress={onSync} accessibilityRole="button" accessibilityLabel={t("pending")}>
           <Text style={s.pendingText}>{pending} {t("pending")}</Text>
+          {isSyncing() && <UpdatingSpinner t={t} />}
         </Pressable>
       )}
 
       <View style={{ marginTop: 12 }}>
         <CaptureTiles tiles={tiles} disabled={!project} onPress={(k) => nav(k)} />
       </View>
+
+      {/* SF-02 — every role, one tap from Today, never behind a menu. Sits
+          apart from the capture tiles because it is not a cost record. */}
+      {project && (
+        <Pressable
+          onPress={() => nav("incident")}
+          style={({ pressed }) => [s.incidentBtn, pressed && { opacity: 0.85 }]}
+          accessibilityRole="button"
+          accessibilityLabel={t("incidentReport")}
+        >
+          <Text style={s.incidentGlyph}>⚠️</Text>
+          <Text style={s.incidentLabel}>{t("incidentReport")}</Text>
+        </Pressable>
+      )}
+
+      {incidents.length > 0 && (
+        <Card style={{ marginTop: 12 }}>
+          <GroupLabel>{t("incidentsToday")}</GroupLabel>
+          {incidents.map((i) => (
+            <View key={i.incident_id} style={s.incRow}>
+              <Text style={s.incType}>{t(`incident_${i.incident_type}`)}</Text>
+              <Text style={s.incDesc} numberOfLines={2}>{i.description}</Text>
+              <Text style={s.incBy}>{i.reported_by}</Text>
+            </View>
+          ))}
+        </Card>
+      )}
 
       {/* Crew guide — the two duties as an orange-numbered list. */}
       {!isSM && project && !hasEntries && (
@@ -122,6 +177,23 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
           <EmptyState body={project ? t("noEntriesToday") : t("pickToUnlock")} />
         ) : (
           <Card>
+            {/* The reward moment: the day's work is in — say so with joy, not
+                just a status tag (crew feedback 2026-07-30). The time is the
+                LATEST submission, so a re-submit moves it. */}
+            {status !== "draft" && (
+              <View style={s.submittedBanner}>
+                <Text style={s.submittedEmoji}>🎉</Text>
+                <Text style={s.submittedText}>{t("submittedJoy")}</Text>
+                {daySubmittedAt(workDate) && (
+                  <Text style={s.submittedTime}>
+                    {new Date(daySubmittedAt(workDate)).toLocaleTimeString(
+                      lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US",
+                      { hour: "numeric", minute: "2-digit" },
+                    )}
+                  </Text>
+                )}
+              </View>
+            )}
             <View style={s.rollupHead}>
               <View>
                 <GroupLabel>{t("recordedToday")}</GroupLabel>
@@ -191,7 +263,7 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
       {/* Site-manager duties, below the ledger. */}
       {isSM && (
         <View style={s.smActions}>
-          <Btn label={t("review")} onPress={() => nav("review")} variant="green" disabled={lines.length === 0} />
+          <Btn label={t(status !== "draft" ? "submitMore" : "review")} onPress={() => nav("review")} variant="green" disabled={lines.length === 0} />
           <Btn label={t("changeOrders")} onPress={() => nav("cos")} variant="outline" style={{ minHeight: 48 }} />
         </View>
       )}
@@ -204,6 +276,9 @@ const s = StyleSheet.create({
   todayBig: { fontFamily: fonts.display, fontSize: 19, fontWeight: "700", letterSpacing: -0.3, color: colors.text },
   pending: {
     alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     marginHorizontal: 14,
     marginTop: 10,
     backgroundColor: "#a1620712",
@@ -212,11 +287,37 @@ const s = StyleSheet.create({
     paddingHorizontal: 11,
   },
   pendingText: { fontFamily: fonts.mono, color: colors.amber, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase" },
+  updatingRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  updatingDiamond: { fontSize: 11, lineHeight: 13, color: colors.accent },
+  updatingText: { fontFamily: fonts.mono, color: colors.accent, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase" },
+  incidentBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginHorizontal: 14,
+    marginTop: 8,
+    minHeight: 46,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#b91c1c33",
+    backgroundColor: "#b91c1c0a",
+  },
+  incidentGlyph: { fontSize: 15 },
+  incidentLabel: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "700", color: colors.red },
+  incRow: { borderTopWidth: 1, borderTopColor: colors.border, paddingVertical: 10 },
+  incType: { fontFamily: fonts.mono, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase", color: colors.red },
+  incDesc: { fontFamily: fonts.body, fontSize: 14, fontWeight: "600", color: colors.text, marginTop: 3, lineHeight: 19 },
+  incBy: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   guideRow: { flexDirection: "row", gap: 10, marginTop: 4, alignItems: "flex-start" },
   guideNum: { fontFamily: fonts.mono, color: colors.accent, fontSize: 12, fontWeight: "700", width: 22, lineHeight: 22 },
   guideText: { fontFamily: fonts.body, color: colors.text, fontSize: 14, fontWeight: "600", lineHeight: 22, flex: 1 },
   inboxRow: { flexDirection: "row", gap: 8 },
   inboxThumb: { width: 72, height: 72, borderRadius: 10, backgroundColor: colors.surfaceSunken, borderWidth: 2, borderColor: colors.accent },
+  submittedBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#15803d14", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12 },
+  submittedEmoji: { fontSize: 16 },
+  submittedText: { fontFamily: fonts.display, fontSize: 15, fontWeight: "800", color: colors.green },
+  submittedTime: { fontFamily: fonts.mono, fontSize: 11.5, fontWeight: "700", color: colors.green, opacity: 0.75, marginLeft: "auto" },
   rollupHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 },
   rollupMeta: { alignItems: "flex-end" },
   metaLine: { fontFamily: fonts.mono, fontSize: 10.5, color: colors.label, lineHeight: 18, letterSpacing: 0.4, fontVariant: ["tabular-nums"] },

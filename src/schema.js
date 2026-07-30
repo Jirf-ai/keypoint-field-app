@@ -2,12 +2,17 @@
 // The app captures; it computes nothing beyond qty × cost display math (which
 // the schema itself defines as a computed column).
 
-// Phone verification gate (decided Jeffrey 2026-07-24): the create-account
-// flow captures a phone number and shows the confirmation-code step ONLY when
-// this is true. Kept FALSE for internal testing/pilot ("bypass on our terms");
-// flip TRUE for the public release — requires Supabase phone-OTP + an SMS
-// provider wired in (Tech Eval auth stack). The UI for the code step ships
-// now so going public is a flag flip + backend, not a redesign.
+// Phone verification gate (decided Jeffrey 2026-07-24; turned ON 2026-07-28 when
+// phone-OTP landed): the create-account flow captures a phone number and shows
+// the confirmation-code step ONLY when this is true.
+//
+// TRUE since the worker-auth edge function shipped — signup and cross-device
+// login both go through a real OTP. NOTE the second half of the original
+// condition is still outstanding: no SMS provider is configured on the project,
+// so worker-auth runs in dev/pilot mode and hands the code back in its response
+// (the app prefills it). That is "bypass on our terms" — good for a supervised
+// pilot, NOT proof of phone ownership. Setting the TWILIO_* secrets flips it to
+// real texts with no code change and no redeploy.
 export const REQUIRE_PHONE_VERIFICATION = true;
 
 // §2 cost classification. Labor lives on its own sheet/entry type (always L).
@@ -81,16 +86,22 @@ export function projectCode(name) {
     : street.replace(/[^A-Za-z0-9]/g, "").slice(0, 6).toUpperCase() || "PROJ";
 }
 
+// SF-02 — incident / near-miss types. A constrained enum (not free text) so
+// safety records aggregate across jobs the way the reason codes do. Order is
+// the order the crew sees: the two that matter most first.
+export const INCIDENT_TYPES = ["injury", "near_miss", "property", "other"];
+
 export const CO_REASONS = [
   "owner_request", "unforeseen_condition", "design_change",
   "code_requirement", "error_omission",
 ];
 export const CO_STATUS = ["pending", "approved", "rejected", "completed"];
 
-// Photo naming convention (§4.5): {project_code}-{YYYYMMDD}-{seq}.jpg
-export function photoFilename(code, dateStr, seq) {
+// Photo naming convention (§4.5): {project-code}-{YYYYMMDD}-{seq}.jpg
+export function photoFilename(dateStr, seq, code) {
   const ymd = dateStr.replaceAll("-", "");
-  return `${code || "PHOTO"}-${ymd}-${String(seq).padStart(3, "0")}.jpg`;
+  const c = String(code || "FIELD").toUpperCase().replace(/[^A-Z0-9-]/g, "");
+  return `${c}-${ymd}-${String(seq).padStart(3, "0")}.jpg`;
 }
 
 export function todayStr() {
@@ -125,6 +136,24 @@ export function validateLabor(l) {
   if (!l.phase) blocks.push("V_phase");
   if (!l.area) blocks.push("V_area");
   return blocks;
+}
+
+// SF-02. Deliberately the shortest block list in the file: a safety record that
+// is hard to file is a safety record that doesn't get filed. Type and a
+// description are all that's required — the photo is urged, never demanded
+// (a worker helping someone up should not be blocked by a camera).
+export function validateIncident(i) {
+  const blocks = [];
+  if (!INCIDENT_TYPES.includes(i.incident_type)) blocks.push("V_incident_type");
+  if (!i.description || !i.description.trim()) blocks.push("V_description");
+  if (i.work_date > todayStr()) blocks.push("V5_future");
+  return blocks;
+}
+
+export function incidentWarnings(i) {
+  const warns = [];
+  if (!i.photo_count) warns.push("V11_incident_photo");
+  return warns;
 }
 
 // Warnings (never block). `lines` = existing entries for the same work_date.

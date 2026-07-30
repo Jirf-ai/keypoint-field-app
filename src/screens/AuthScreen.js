@@ -18,7 +18,7 @@ import { call } from "../api";
 import { REQUIRE_PHONE_VERIFICATION, TRADES } from "../schema";
 import { copyToClipboard } from "../util";
 import { newWorkerId, sendOtp, verifyOtp } from "../auth";
-import { createProfile, gcAccount, joinByCode, logIn, profiles, resolveShareCode, restoreProfile, setGcAccount } from "../store";
+import { createProfile, gcAccount, joinByCode, logIn, profiles, restoreProfile, setGcAccount } from "../store";
 import { colors, fonts, type } from "../theme";
 
 const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
@@ -42,10 +42,10 @@ export default function AuthScreen({ t, lang, onDone }) {
   const [role, setRole] = useState(null);
   const [trade, setTrade] = useState(null);
   const [selfie, setSelfie] = useState(null);
-  // Crew must join a site manager's project list at signup (business rule):
-  // they can't record against a project that no manager owns.
+  // Optional SM share code — joins the manager's list when it resolves on
+  // this device (shared-phone case); see PROJECT_INVITES_SPEC.md for the
+  // server-side replacement.
   const [mgrCode, setMgrCode] = useState("");
-  const [mgrCodeErr, setMgrCodeErr] = useState(false);
   const isCrew = role === "journeyman";
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -158,11 +158,20 @@ export default function AuthScreen({ t, lang, onDone }) {
     onDone(p);
   }
 
+  // Crew type letters and numbers only — the hyphen is supplied HERE, never
+  // by the user (many workers don't know how to type one; Jeffrey
+  // 2026-07-30). Canonical form is PREFIX-XXXX: strip everything that isn't
+  // a letter/number and re-insert the dash before the last 4.
+  function canonicalTeamCode(raw) {
+    const bare = String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return bare.length > 4 ? `${bare.slice(0, -4)}-${bare.slice(-4)}` : bare;
+  }
+
   // No code, no account: the GC's registration (and consent) is what makes
   // the crew's capture legitimate — validated server-side, online required.
   async function validateTeamCode() {
-    const codeInput = teamCode.trim().toUpperCase();
-    if (gc && codeInput === gc.gc_code) {
+    const codeInput = canonicalTeamCode(teamCode);
+    if (gc && codeInput === canonicalTeamCode(gc.gc_code)) {
       return { gc_account_id: gc.gc_account_id, gc_code: gc.gc_code, business_name: gc.business_name };
     }
     let r;
@@ -181,13 +190,14 @@ export default function AuthScreen({ t, lang, onDone }) {
     // Full signup, no shortcuts: name, role, team code AND the selfie — the
     // GC code authorizes the profile, it never replaces registration.
     if (!name.trim() || !role || !teamCode.trim() || !selfie) return;
-    // Crew need a valid site-manager code before an account is created.
-    if (isCrew) {
-      if (!resolveShareCode(mgrCode)) {
-        setMgrCodeErr(true);
-        return;
-      }
-    }
+    // The site-manager code is optional, not a gate: resolveShareCode()
+    // matches against THIS device's profiles, so on a crew member's own phone
+    // the correct code still fails — it can only ever resolve on the SM's own
+    // phone. finishCreate() still joins when it does resolve (shared-device
+    // case). Crew reach their project via the Records typeahead, which carries
+    // the canonical uuid sync-field-log expects. Re-gate only when the code
+    // resolves server-side — see PROJECT_INVITES_SPEC.md. The registration
+    // gate is the GC team code (server-validated, consent-bearing) below.
     setBusy(true);
     setCodeState(null);
     const gcInfo = await validateTeamCode();
@@ -587,7 +597,7 @@ export default function AuthScreen({ t, lang, onDone }) {
           onChangeText={(x) => { setTeamCode(x.toUpperCase()); setCodeState(null); }}
           autoCapitalize="characters"
           placeholder="LOR-7XK4"
-          hint={gc && teamCode.trim().toUpperCase() === gc.gc_code ? `✓ ${gc.business_name}` : t("teamCodeHint")}
+          hint={gc && canonicalTeamCode(teamCode) === canonicalTeamCode(gc.gc_code) ? `✓ ${gc.business_name}` : t("teamCodeHint")}
         />
         {codeState === "invalid" && <Text style={s.err}>{t("teamCodeInvalid")}</Text>}
         {codeState === "offline" && <Text style={s.err}>{t("needOnline")}</Text>}
@@ -605,18 +615,19 @@ export default function AuthScreen({ t, lang, onDone }) {
             );
           })}
         </View>
-        {/* Crew must be attached to a site manager's project list. */}
+        {/* Optional: joining an SM's list only works where their profile is
+            local (their phone). Crew on their own phones find the project via
+            Records search instead. */}
         {isCrew && (
           <View style={{ marginTop: 16 }}>
             <Field
-              label={t("joinCodeLabel")}
+              label={`${t("joinCodeLabel")} · ${t("optional")}`}
               value={mgrCode}
-              onChangeText={(x) => { setMgrCode(x.toUpperCase()); setMgrCodeErr(false); }}
+              onChangeText={(x) => setMgrCode(x.toUpperCase())}
               autoCapitalize="characters"
               placeholder="KP-7F3A"
               hint={t("joinCodeHint")}
             />
-            {mgrCodeErr && <Text style={s.err}>{t("joinFailed")}</Text>}
           </View>
         )}
         <GroupLabel right={t("optional")} style={{ marginTop: 16 }}>{t("usualTrade")}</GroupLabel>
@@ -658,7 +669,7 @@ export default function AuthScreen({ t, lang, onDone }) {
           <Btn
             label={REQUIRE_PHONE_VERIFICATION ? t("sendCode") : t("start")}
             onPress={create}
-            disabled={busy || !role || !name.trim() || !teamCode.trim() || !selfie || (isCrew && mgrCode.trim().length < 4)}
+            disabled={busy || !role || !name.trim() || !teamCode.trim() || !selfie}
           />
           {/* Back to the crew/contractor chooser (which also has "Log in"). */}
           <Pressable onPress={() => setChooser(true)} hitSlop={8} accessibilityRole="button" style={s.backLinkWrap}>

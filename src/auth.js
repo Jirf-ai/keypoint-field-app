@@ -13,6 +13,12 @@ export async function verifyOtp(phone, code, worker) {
   return call("worker-auth", { action: "verify-otp", phone, code, ...(worker ? { worker } : {}) });
 }
 
+// Everyone registered under the team code — the SM's pick-a-crew-member list
+// for record-for-someone-else (hard identity by worker_id, no spelling drift).
+export async function fetchTeamRoster(gc_code) {
+  return call("worker-auth", { action: "roster", gc_code });
+}
+
 // Client-generated worker id, pre-allocated before verify so the same id is used
 // server-side (worker-auth) and locally (createProfile) — one stable identity.
 export function newWorkerId() {

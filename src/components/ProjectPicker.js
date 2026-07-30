@@ -8,6 +8,7 @@ import { projectCode } from "../schema";
 import { Card, Field, Muted, ProjectPlate, StatusPill } from "./ui";
 import { myProjects, myShareCode } from "../store";
 import { colors, fonts, radius, type } from "../theme";
+import { copyToClipboard } from "../util";
 
 // Records returns { id, name, status }. The plate wants a code, a clean display
 // name (address suffix dropped) and a city — derive them here from the real
@@ -32,6 +33,7 @@ export default function ProjectPicker({ t, current, recents, onSelect, role, dat
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [noHit, setNoHit] = useState(false);
+  const [copied, setCopied] = useState(false);
   const timer = useRef(null);
 
   // Debounced typeahead: search from 3 characters, 350ms after the last key.
@@ -153,7 +155,23 @@ export default function ProjectPicker({ t, current, recents, onSelect, role, dat
                 </Pressable>
               )}
               {isSM && shareCode ? (
-                <Text style={s.shareLine}>{t("shareCodeInline")} <Text style={s.shareCode}>{shareCode}</Text></Text>
+                <View style={s.shareRow}>
+                  <Text style={s.shareLine}>{t("shareCodeInline")} <Text style={s.shareCode}>{shareCode}</Text></Text>
+                  <Pressable
+                    style={s.copyChip}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("copyCode")}
+                    onPress={async () => {
+                      if (await copyToClipboard(shareCode)) {
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 1600);
+                      }
+                    }}
+                  >
+                    <Text style={s.copyChipText}>{copied ? `✓ ${t("copiedCode")}` : `⧉ ${t("copyCode")}`}</Text>
+                  </Pressable>
+                </View>
               ) : null}
             </View>
           </ScrollView>
@@ -182,8 +200,11 @@ const s = StyleSheet.create({
   findGroup: { marginTop: 18, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border },
   linkAction: { minHeight: 40, alignItems: "center", justifyContent: "center", marginTop: 12 },
   linkActionText: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "700", color: colors.accent },
-  shareLine: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, marginTop: 8, textAlign: "center" },
+  shareRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, marginTop: 8 },
+  shareLine: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, textAlign: "center" },
   shareCode: { fontFamily: fonts.mono, fontSize: 12, fontWeight: "700", color: colors.accent },
+  copyChip: { borderWidth: 1, borderColor: "#d95a1f55", borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9, backgroundColor: "#d95a1f0d" },
+  copyChipText: { fontFamily: fonts.body, fontSize: 11.5, fontWeight: "700", color: colors.accent },
   count: { fontFamily: fonts.body, fontSize: 11.5, color: colors.textMuted, marginTop: 10, marginBottom: 2 },
   resultCard: {
     borderWidth: 1,

@@ -9,8 +9,10 @@ import { File, Paths } from "expo-file-system";
 import { refreshLocation } from "../location";
 import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, PickerRow, StickyFooter, preferred } from "../components/ui";
 import { phaseLabel } from "../i18n";
-import { PHASES, photoFilename, projectCode } from "../schema";
+import { PHASES, photoFilename } from "../schema";
+import { parseProject } from "../components/ProjectPicker";
 import { activeLines, addPhoto, currentAreas, currentProject, getSettings, nextPhotoSeq } from "../store";
+import { durablePhotoUri } from "../util";
 import { colors, fonts, type } from "../theme";
 
 const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"]);
@@ -55,9 +57,10 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
     // Force a fresh fix for the geotag (also warms the cache for line stamps).
     const gps = await refreshLocation({ maxAgeMs: 0 });
     let seq = nextPhotoSeq(workDate);
-    const code = projectCode(currentProject()?.name);
+    const proj = currentProject();
+    const projCode = proj ? parseProject(proj).code : null;
     for (const a of assets) {
-      const filename = photoFilename(code, workDate, seq++);
+      const filename = photoFilename(workDate, seq++, projCode);
       let storedUri = a.uri;
       if (Platform.OS !== "web") {
         try {
@@ -67,6 +70,11 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
         } catch {
           storedUri = a.uri;
         }
+      } else {
+        // Web: the picker's blob: URL dies with the page session (2026-07-30
+        // gauntlet: a phone restart orphaned every photo) — pin the pixels
+        // into the row itself before anything else can happen.
+        storedUri = await durablePhotoUri(a.uri);
       }
       await addPhoto({
         work_date: workDate,

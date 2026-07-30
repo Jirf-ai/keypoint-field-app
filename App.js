@@ -12,7 +12,7 @@ import { todayStr } from "./src/schema";
 import { activeProfile, currentProject, getSettings, load, logOut, myProjects, myShareCode, pendingCount, recentProjects, saveSettings, setCurrentProject } from "./src/store";
 import { refreshLocation } from "./src/location";
 import { syncReminders } from "./src/notifications";
-import { syncNow } from "./src/sync";
+import { onSyncActivity, syncNow } from "./src/sync";
 import AuthScreen from "./src/screens/AuthScreen";
 import AddItemScreen from "./src/screens/AddItemScreen";
 import AddLaborScreen from "./src/screens/AddLaborScreen";
@@ -21,6 +21,7 @@ import AddProjectScreen from "./src/screens/AddProjectScreen";
 import JoinListScreen from "./src/screens/JoinListScreen";
 import ChangeOrdersScreen from "./src/screens/ChangeOrdersScreen";
 import CrewScreen from "./src/screens/CrewScreen";
+import IncidentScreen from "./src/screens/IncidentScreen";
 import MyHoursScreen from "./src/screens/MyHoursScreen";
 import ReviewScreen from "./src/screens/ReviewScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
@@ -86,6 +87,7 @@ const TITLES = {
   joinlist: "joinListTitle",
   myhours: "myHours",
   crew: "crewTitle",
+  incident: "incidentNavTitle",
 };
 
 export default function App() {
@@ -143,6 +145,11 @@ export default function App() {
     refreshLocation(); // warm the cache so line entries carry a recent fix
     syncReminders();   // re-arm the end-of-day nudge; drops today's once logged
   }, [ready, profile, screen]);
+
+  // Live drain feedback: every acknowledged sync chunk re-renders, so the
+  // pending badge counts down in real time and the "updating" spinner shows
+  // while a sync is running (instead of the badge sitting stale until done).
+  useEffect(() => onSyncActivity(() => setTick((x) => x + 1)), []);
 
   useEffect(() => {
     if (dock || splashDone) return;
@@ -273,6 +280,7 @@ export default function App() {
         {authed && screen === "review" && <ReviewScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
         {authed && screen === "myhours" && <MyHoursScreen t={t} lang={lang} />}
         {authed && screen === "crew" && <CrewScreen t={t} lang={lang} workDate={workDate} />}
+        {authed && screen === "incident" && <IncidentScreen t={t} lang={lang} workDate={workDate} onDone={done} />}
         {authed && screen === "cos" && <ChangeOrdersScreen t={t} workDate={workDate} onDone={done} />}
         {authed && screen === "addproject" && <AddProjectScreen t={t} onDone={done} />}
         {authed && screen === "joinlist" && <JoinListScreen t={t} onDone={done} />}

@@ -84,8 +84,12 @@ against the PRD's "not a PM tool" non-goals.
 | CR-16 | No background location | ✅ |
 
 Also shipped beyond the original backlog: **location provenance on every record**
-(web + native, all line types, not just photos) and **CS-01 "my hours this week"**
-(below).
+(web + native, all line types, not just photos), **CS-01 "my hours this week"**
+(below), and **phone-OTP auth** — SM-01 now means a real account, not a
+device-local profile: signup and cross-device login both verify a phone through
+the `worker-auth` edge function, and one phone login restores a GC session too.
+Note it runs in dev/pilot mode until an SMS provider is configured (see
+`REQUIRE_PHONE_VERIFICATION` in `src/schema.js`).
 
 ---
 
@@ -97,7 +101,7 @@ the PRD fenced off. Built items marked ✅.
 
 ### A — Safety & compliance
 - **SF-01 ⭐** Foreman runs a **toolbox talk** and captures attendees (tap faces).
-- **SF-02 ⭐** Any worker reports an **incident / near-miss** with photo + location.
+- **SF-02 ⭐ ✅** Any worker reports an **incident / near-miss** with photo + location.
 - **SF-03** Daily **heat-illness / weather check** (Cal-OSHA §3395), temp-stamped.
 - **SF-04** One-tap daily **PPE / hazard acknowledgment**.
 
@@ -203,16 +207,36 @@ get AC when scheduled.
 - [ ] A warning-toned confirmation is shown; saving is never blocked.
 - [ ] es/zh complete.
 
-### SF-02 — Report an incident / near-miss
+### SF-02 — Report an incident / near-miss ✅ (built)
 > As any worker, I want to report an incident or near-miss with a photo,
 > location, and note in under a minute.
 
-- [ ] Available to **every** role from Today, not buried in a menu.
-- [ ] Captures: type (injury / near-miss / property / other), short description,
-      ≥1 photo, auto location + timestamp, reporter identity.
-- [ ] Works offline; syncs like any record; nothing hard-deleted (append-only).
-- [ ] Confirmation that it was recorded; median capture < 60 s.
-- [ ] es/zh complete (safety copy is P0 for a Spanish-speaking crew).
+- [x] Available to **every** role from Today, not buried in a menu — a red-toned
+      **Report an incident or near-miss** bar sits directly under the capture
+      tiles for crew and site managers alike.
+- [x] Captures: type (injury / near-miss / property / other) as a constrained
+      enum, short description, ≥1 photo (optional by design, see below), auto
+      location + timestamp, and reporter identity (name + worker_id) stamped
+      from the active profile.
+- [x] Works offline; syncs like any record (`incidents` rides the same
+      sync-field-log call, ahead of photos so photo→incident links resolve);
+      append-only with version/supersedes — nothing is ever hard-deleted.
+- [x] Confirmation screen states it was recorded and shows exactly what was
+      kept: type, description, reporter, time, whether location was captured,
+      and photo count.
+- [x] es/zh complete.
+
+**Deliberate deviation from the AC:** the photo is urged, not required. "≥1
+photo" as a hard gate would block the report when someone is helping a person
+up — the record surviving beats the pixels. `incidentWarnings()` flags a
+photoless report without stopping the save, matching the schema's "warnings
+never block capture" rule (§8).
+
+Backend: `field_incidents` (RLS on, no policies → service-role only, same as
+every field table) + a nullable `field_photos.incident_id`, migration
+`20260729_field_incidents.sql`. `sync-field-log` v4 writes incidents before
+photos and rescues an orphaned incident photo the same way it already rescues
+one whose line hasn't synced.
 
 ### SC-01 — Log a delay / blocker with a reason
 > As a foreman, I want to log a delay/blocker with a reason code, so schedule
