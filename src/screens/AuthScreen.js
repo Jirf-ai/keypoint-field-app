@@ -158,11 +158,20 @@ export default function AuthScreen({ t, lang, onDone }) {
     onDone(p);
   }
 
+  // Crew type letters and numbers only — the hyphen is supplied HERE, never
+  // by the user (many workers don't know how to type one; Jeffrey
+  // 2026-07-30). Canonical form is PREFIX-XXXX: strip everything that isn't
+  // a letter/number and re-insert the dash before the last 4.
+  function canonicalTeamCode(raw) {
+    const bare = String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return bare.length > 4 ? `${bare.slice(0, -4)}-${bare.slice(-4)}` : bare;
+  }
+
   // No code, no account: the GC's registration (and consent) is what makes
   // the crew's capture legitimate — validated server-side, online required.
   async function validateTeamCode() {
-    const codeInput = teamCode.trim().toUpperCase();
-    if (gc && codeInput === gc.gc_code) {
+    const codeInput = canonicalTeamCode(teamCode);
+    if (gc && codeInput === canonicalTeamCode(gc.gc_code)) {
       return { gc_account_id: gc.gc_account_id, gc_code: gc.gc_code, business_name: gc.business_name };
     }
     let r;
@@ -588,7 +597,7 @@ export default function AuthScreen({ t, lang, onDone }) {
           onChangeText={(x) => { setTeamCode(x.toUpperCase()); setCodeState(null); }}
           autoCapitalize="characters"
           placeholder="LOR-7XK4"
-          hint={gc && teamCode.trim().toUpperCase() === gc.gc_code ? `✓ ${gc.business_name}` : t("teamCodeHint")}
+          hint={gc && canonicalTeamCode(teamCode) === canonicalTeamCode(gc.gc_code) ? `✓ ${gc.business_name}` : t("teamCodeHint")}
         />
         {codeState === "invalid" && <Text style={s.err}>{t("teamCodeInvalid")}</Text>}
         {codeState === "offline" && <Text style={s.err}>{t("needOnline")}</Text>}

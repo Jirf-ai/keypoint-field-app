@@ -193,11 +193,17 @@ export function myShareCode() {
   return me ? shareCodeFor(me.worker_id) : null;
 }
 
+// Punctuation-blind code key: crew type letters/numbers only — "KP8E79",
+// "kp 8e79" and "KP-8E79" all match (workers shouldn't need the hyphen key).
+function codeKey(s) {
+  return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 // Resolve a share code to its site-manager profile without mutating anything —
 // used to validate a crew member's code at signup before the account exists.
 export function resolveShareCode(rawCode) {
-  const code = String(rawCode || "").trim().toUpperCase();
-  return (state?.profiles ?? []).find((p) => p.role === "site_manager" && shareCodeFor(p.worker_id) === code) ?? null;
+  const code = codeKey(rawCode);
+  return (state?.profiles ?? []).find((p) => p.role === "site_manager" && codeKey(shareCodeFor(p.worker_id)) === code) ?? null;
 }
 
 // Projects the active worker can see: a manager sees the ones they created; a
@@ -248,9 +254,9 @@ export function currentAreas() {
 export async function joinByCode(rawCode) {
   const me = activeProfile();
   if (!me) return { ok: false, reason: "no_profile" };
-  const code = String(rawCode || "").trim().toUpperCase();
+  const code = codeKey(rawCode);
   const owner = (state.profiles ?? []).find(
-    (p) => p.worker_id !== me.worker_id && p.role === "site_manager" && shareCodeFor(p.worker_id) === code
+    (p) => p.worker_id !== me.worker_id && p.role === "site_manager" && codeKey(shareCodeFor(p.worker_id)) === code
   );
   if (!owner) return { ok: false, reason: "not_found" };
   me.joined_owner_ids = Array.from(new Set([...(me.joined_owner_ids ?? []), owner.worker_id]));

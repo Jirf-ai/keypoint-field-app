@@ -198,10 +198,13 @@ Deno.serve(async (req) => {
   }
 
   if (action === "roster") {
-    const gcCode = String(body.gc_code ?? "").trim().toUpperCase();
-    if (!gcCode) return json({ ok: false, error: "gc_code is required" }, 400);
-    const { data: gc } = await supabase.from("gc_accounts")
-      .select("id").eq("gc_code", gcCode).eq("status", "active").maybeSingle();
+    // Punctuation-blind: crew-facing codes are typed letters/numbers only —
+    // "GAUYGK6" and "GAU-YGK6" both resolve (pilot-scale scan).
+    const bare = String(body.gc_code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!bare) return json({ ok: false, error: "gc_code is required" }, 400);
+    const { data: gcs } = await supabase.from("gc_accounts")
+      .select("id, gc_code").eq("status", "active");
+    const gc = (gcs ?? []).find((g) => String(g.gc_code).toUpperCase().replace(/[^A-Z0-9]/g, "") === bare);
     if (!gc) return json({ ok: false, error: "unknown team code" }, 404);
     const { data: regs } = await supabase.from("worker_registrations")
       .select("worker_id, display_name, role, trade")
