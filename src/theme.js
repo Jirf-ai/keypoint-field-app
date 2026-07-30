@@ -99,6 +99,10 @@ let _fontsInjected = false;
 export function ensureFontsWeb() {
   if (Platform.OS !== "web" || _fontsInjected || typeof document === "undefined") return;
   _fontsInjected = true;
+  // The deployed build self-hosts the fonts (patch-dist injects a
+  // data-local-fonts stylesheet the service worker caches — offline relaunch
+  // keeps the brand fonts). The CDN below is only the dev-server fallback.
+  if (document.querySelector("link[data-local-fonts]")) return;
   const pre1 = document.createElement("link");
   pre1.rel = "preconnect";
   pre1.href = "https://fonts.googleapis.com";

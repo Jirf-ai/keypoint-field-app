@@ -22,13 +22,33 @@ const PHOTO_CHUNK = 3; // ~0.5MB each at quality 0.6 → keeps requests small
 
 let inFlight = null;
 
+// Sync-activity feed for the UI: fires on start, after every acknowledged
+// chunk, and on finish — the Today badge counts down live and shows the
+// "updating" spinner while a drain is running, so a crew member knows the
+// app is working and not done (Jeffrey, 2026-07-30).
+const listeners = new Set();
+export function onSyncActivity(cb) {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
+export function isSyncing() {
+  return !!inFlight;
+}
+function ping() {
+  for (const cb of [...listeners]) {
+    try { cb(); } catch { /* UI callback must never kill a sync */ }
+  }
+}
+
 export function syncNow() {
   if (!inFlight) {
     inFlight = run()
       .catch(() => pendingCount()) // offline / server down: try again later
       .finally(() => {
         inFlight = null;
+        ping();
       });
+    ping();
   }
   return inFlight;
 }
@@ -46,7 +66,7 @@ async function run() {
       // incident_id FK resolves server-side on the very next chunk.
       incidents: g.incidents.map(stripLocal),
     });
-    if (res.ok && res.synced) await markSynced(res.synced, res.synced_at);
+    if (res.ok && res.synced) { await markSynced(res.synced, res.synced_at); ping(); }
     else if (!res.ok) throw new Error(`sync ${res.status}`);
   }
   // Wi-Fi-only gate (PRD §9.1 — crew personal data plans). Rows synced above are
@@ -60,7 +80,7 @@ async function run() {
     for (let i = 0; i < photos.length; i += PHOTO_CHUNK) {
       const chunk = await Promise.all(photos.slice(i, i + PHOTO_CHUNK).map(photoPayload));
       const res = await call("sync-field-log", { project_id, photos: chunk });
-      if (res.ok && res.synced) await markSynced(res.synced, res.synced_at);
+      if (res.ok && res.synced) { await markSynced(res.synced, res.synced_at); ping(); }
       else if (!res.ok) throw new Error(`sync ${res.status}`);
     }
   }

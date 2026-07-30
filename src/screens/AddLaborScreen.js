@@ -5,12 +5,13 @@
 // of crew who don't self-report ("record for someone else"). Opening with an
 // existing line in `editing` prefills the form and saves an append-only
 // correction (amendLine) instead of a new row.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { fetchTeamRoster } from "../auth";
 import { Card, Field, FormScreen, GroupLabel, MathStrip, NoticeCard, NumericField, PickerRow, Segmented, StickyFooter, preferred } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { HOUR_TYPES, PHASES, TRADES, validateLabor, laborWarnings } from "../schema";
-import { activeLines, activeProfile, addLine, amendLine, currentAreas, getSettings } from "../store";
+import { activeLines, activeProfile, addLine, amendLine, currentAreas, getSettings, setTeamRoster, teamRoster } from "../store";
 import { colors, fonts } from "../theme";
 
 const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
@@ -36,6 +37,28 @@ export default function AddLaborScreen({ t, lang, workDate, onDone, editing }) {
   const editingOther = !!editing && editing.worker !== myName;
   const [forOther, setForOther] = useState(editingOther);
   const [otherName, setOtherName] = useState(editingOther ? editing.worker : "");
+  // Picked roster identity ("__manual" = typed name, e.g. a one-day laborer
+  // who never registered). Registered picks carry worker_id onto the entry —
+  // hard identity, no spelling drift (SM-15).
+  const [otherId, setOtherId] = useState(editingOther ? editing.worker_id ?? "__manual" : null);
+  const [, setRosterTick] = useState(0);
+
+  // Refresh the server roster when an SM opens the form (fire-and-forget —
+  // offline just keeps the cached copy).
+  useEffect(() => {
+    if (!isSM || !me?.gc_code) return;
+    fetchTeamRoster(me.gc_code)
+      .then(async (r) => {
+        if (r?.ok && Array.isArray(r.workers)) {
+          await setTeamRoster(r.workers);
+          setRosterTick((n) => n + 1);
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const roster = teamRoster().filter((w) => w.worker_id !== me?.worker_id);
   const [trade, setTrade] = useState(editing?.trade ?? me?.default_trade ?? null);
   const [hours, setHours] = useState(editing ? String(editing.hours ?? "") : "");
   const [hourType, setHourType] = useState(editing?.hour_type ?? "regular");
@@ -56,6 +79,9 @@ export default function AddLaborScreen({ t, lang, workDate, onDone, editing }) {
       cost_class: "L",
       trade,
       worker: worker.trim(),
+      // Hard identity: roster picks carry the crew member's registered id;
+      // typed names (unregistered day labor) and self-entries resolve too.
+      worker_id: forOther ? (otherId && otherId !== "__manual" ? otherId : null) : me?.worker_id ?? null,
       hours: Number(hours),
       hour_type: hourType,
       hourly_rate: rate === "" ? null : Number(rate),
@@ -128,13 +154,33 @@ export default function AddLaborScreen({ t, lang, workDate, onDone, editing }) {
         </View>
 
         {/* Site managers can log for a crew member who isn't recording their own
-            hours; everyone else records as themselves. */}
+            hours; everyone else records as themselves. Registered crew are
+            picked from the team roster (identity by worker_id); the typed-name
+            path stays for unregistered day labor. */}
         {isSM && (
           <View style={{ marginTop: 14 }}>
             <Pressable onPress={() => setForOther((v) => !v)} hitSlop={6} accessibilityRole="button">
               <Text style={s.link}>{forOther ? `↩ ${t("recordingAs")} ${myName}` : t("forSomeoneElse")}</Text>
             </Pressable>
-            {forOther && (
+            {forOther && roster.length > 0 && (
+              <View style={{ marginTop: 6 }}>
+                <PickerRow
+                  first
+                  label={t("worker")}
+                  value={otherId}
+                  displayValue={otherId === "__manual" ? t("notListed") : roster.find((w) => w.worker_id === otherId)?.display_name ?? null}
+                  options={[...roster.map((w) => ({ code: w.worker_id, name: w.display_name })), { code: "__manual" }]}
+                  onChange={(code) => {
+                    setOtherId(code);
+                    const w = roster.find((x) => x.worker_id === code);
+                    setOtherName(w ? w.display_name : "");
+                  }}
+                  renderLabel={(o) => (o.code === "__manual" ? t("notListed") : o.name)}
+                  show={6}
+                />
+              </View>
+            )}
+            {forOther && (roster.length === 0 || otherId === "__manual") && (
               <Field label={t("worker")} value={otherName} onChangeText={setOtherName} placeholder="—" style={{ marginTop: 10 }} />
             )}
           </View>

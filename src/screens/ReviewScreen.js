@@ -1,13 +1,15 @@
 // End-of-day review → submit. Submit locks the day; anything added after is an
 // amendment — never overwritten, never deleted (PRD §5.1). Reads as a ledger:
 // big total, a mono stat strip, then one row per cost class (§2.5).
+import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { parseProject } from "../components/ProjectPicker";
+import SubmitCelebration from "../components/SubmitCelebration";
 import { ClassBadge, FormScreen, GroupLabel, Muted, NoticeCard, StickyFooter, usdCents } from "../components/ui";
 import { CLASS_LABELS, colors, fonts, type } from "../theme";
 import { activeLines, currentProject, dayStatus, photosFor, submitDay, todayTotals } from "../store";
 import { syncNow } from "../sync";
-import { dateStamp } from "../util";
+import { buzz, dateStamp } from "../util";
 
 function Stat({ label, value, zero }) {
   return (
@@ -27,15 +29,25 @@ export default function ReviewScreen({ t, lang, workDate, onDone }) {
   const code = project ? parseProject(project).code : "";
   const classes = Object.entries(totals.byClass).filter(([, v]) => v > 0);
 
+  const [celebrating, setCelebrating] = useState(false);
+
   async function submit() {
+    buzz(35); // acknowledge the tap before anything else happens
     await submitDay(workDate);
     syncNow();
-    onDone();
+    // The send-off overlay runs, then hands the user back to Today.
+    setCelebrating(true);
   }
 
+  // An amended day (new entries after submit) can be submitted again —
+  // "Submit more!" has to land somewhere real. Only a clean submitted day
+  // with nothing new is closed.
+  const canSubmit = status !== "submitted";
+
   return (
+    <View style={{ flex: 1 }}>
     <FormScreen
-      footer={<StickyFooter onCancel={onDone} cancelLabel={t("cancel")} primaryLabel={status === "draft" ? t("submitDay") : t("submitted")} onPrimary={submit} tone="green" disabled={status !== "draft"} />}
+      footer={<StickyFooter onCancel={onDone} cancelLabel={t("cancel")} primaryLabel={canSubmit ? t("submitDay") : t("submitted")} onPrimary={submit} tone="green" disabled={!canSubmit || celebrating} />}
     >
       <View style={s.card}>
         <Text style={s.metaLine}>{dateStamp(workDate, lang)}  ·  {code}</Text>
@@ -60,6 +72,8 @@ export default function ReviewScreen({ t, lang, workDate, onDone }) {
         <Muted>{t("lockBody")}</Muted>
       </NoticeCard>
     </FormScreen>
+    {celebrating && <SubmitCelebration t={t} onDone={onDone} />}
+    </View>
   );
 }
 

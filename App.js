@@ -12,7 +12,7 @@ import { todayStr } from "./src/schema";
 import { activeProfile, currentProject, getSettings, load, logOut, myProjects, myShareCode, pendingCount, recentProjects, saveSettings, setCurrentProject } from "./src/store";
 import { refreshLocation } from "./src/location";
 import { syncReminders } from "./src/notifications";
-import { syncNow } from "./src/sync";
+import { onSyncActivity, syncNow } from "./src/sync";
 import AuthScreen from "./src/screens/AuthScreen";
 import AddItemScreen from "./src/screens/AddItemScreen";
 import AddLaborScreen from "./src/screens/AddLaborScreen";
@@ -145,6 +145,11 @@ export default function App() {
     refreshLocation(); // warm the cache so line entries carry a recent fix
     syncReminders();   // re-arm the end-of-day nudge; drops today's once logged
   }, [ready, profile, screen]);
+
+  // Live drain feedback: every acknowledged sync chunk re-renders, so the
+  // pending badge counts down in real time and the "updating" spinner shows
+  // while a sync is running (instead of the badge sitting stale until done).
+  useEffect(() => onSyncActivity(() => setTick((x) => x + 1)), []);
 
   useEffect(() => {
     if (dock || splashDone) return;

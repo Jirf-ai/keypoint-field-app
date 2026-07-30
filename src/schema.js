@@ -106,10 +106,11 @@ export const CO_REASONS = [
 ];
 export const CO_STATUS = ["pending", "approved", "rejected", "completed"];
 
-// Photo naming convention (§4.5): {project_id-short}-{YYYYMMDD}-{seq}.jpg
-export function photoFilename(dateStr, seq) {
+// Photo naming convention (§4.5): {project-code}-{YYYYMMDD}-{seq}.jpg
+export function photoFilename(dateStr, seq, code) {
   const ymd = dateStr.replaceAll("-", "");
-  return `1257-${ymd}-${String(seq).padStart(3, "0")}.jpg`;
+  const c = String(code || "FIELD").toUpperCase().replace(/[^A-Z0-9-]/g, "");
+  return `${c}-${ymd}-${String(seq).padStart(3, "0")}.jpg`;
 }
 
 export function todayStr() {

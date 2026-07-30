@@ -11,14 +11,37 @@ const dist = path.join(__dirname, "..", "dist");
 const htmlPath = path.join(dist, "index.html");
 let html = fs.readFileSync(htmlPath, "utf8");
 
-const bundle = fs.readdirSync(path.join(dist, "_expo", "static", "js", "web"))
-  .find((f) => f.endsWith(".js"));
-if (!bundle) throw new Error("no web bundle found in dist/_expo");
-const hash = (bundle.match(/index-([0-9a-f]+)\.js/) || [])[1] || String(Date.now());
+// ALL bundles: expo emits an entry bundle plus split chunks. The cache key
+// must move when ANY of them changes (keying to one file left phones on a
+// stale build when only the other changed), and every one belongs in the
+// offline shell.
+const bundles = fs.readdirSync(path.join(dist, "_expo", "static", "js", "web"))
+  .filter((f) => f.endsWith(".js"))
+  .sort();
+if (!bundles.length) throw new Error("no web bundle found in dist/_expo");
+const hash = bundles
+  .map((b) => ((b.match(/index-([0-9a-f]+)\.js/) || [])[1] || "x").slice(0, 8))
+  .join("-");
 
 // Relative paths (idempotent: only rewrites root-absolute forms).
 html = html.replace('href="/favicon.ico"', 'href="./favicon.ico"');
 html = html.replace('src="/_expo/', 'src="./_expo/');
+
+// Self-hosted fonts (scripts/fetch-fonts.js): copy into dist and link the
+// stylesheet. Same-origin means the service worker can cache them — the
+// offline relaunch keeps the brand fonts (2026-07-30 gauntlet fix).
+const fontsSrc = path.join(__dirname, "..", "assets", "webfonts");
+const fontFiles = fs.existsSync(fontsSrc)
+  ? fs.readdirSync(fontsSrc).filter((f) => f.endsWith(".woff2"))
+  : [];
+if (fontFiles.length) {
+  fs.mkdirSync(path.join(dist, "webfonts"), { recursive: true });
+  for (const f of fontFiles) fs.copyFileSync(path.join(fontsSrc, f), path.join(dist, "webfonts", f));
+  fs.copyFileSync(path.join(fontsSrc, "fonts.css"), path.join(dist, "fonts.css"));
+  if (!html.includes("data-local-fonts")) {
+    html = html.replace("</head>", `  <link rel="stylesheet" href="./fonts.css" data-local-fonts />\n</head>`);
+  }
+}
 
 // PWA meta + service-worker registration, once.
 if (!html.includes("apple-mobile-web-app-capable")) {
@@ -45,8 +68,8 @@ fs.writeFileSync(path.join(dist, "sw.js"), `// Offline shell for the Field app w
 const CACHE = "field-app-${hash}";
 const SHELL = [
   "./index.html",
-  "./_expo/static/js/web/${bundle}",
-  "./icon.png",
+${bundles.map((b) => `  "./_expo/static/js/web/${b}",`).join("\n")}
+${fontFiles.length ? `  "./fonts.css",\n${fontFiles.map((f) => `  "./webfonts/${f}",`).join("\n")}\n` : ""}  "./icon.png",
   "./favicon.ico",
 ];
 
@@ -81,4 +104,4 @@ self.addEventListener("fetch", (e) => {
 });
 `);
 
-console.log(`patched dist/: relative paths + PWA meta + sw.js (bundle ${bundle})`);
+console.log(`patched dist/: relative paths + PWA meta + sw.js (bundles ${bundles.join(", ")} → cache field-app-${hash})`);

@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { areasFor, todayStr } from "./schema";
 import { lastLocation } from "./location";
+import { shrinkDataUri } from "./util";
 
 const KEY = "kaicon-field:v1";
 
@@ -42,6 +43,9 @@ const EMPTY = {
   photos: [],
   change_orders: [],
   incidents: [],      // SF-02 safety records — any role, append-only
+  // Server team roster (worker_registrations under our GC), cached so the
+  // record-for-someone-else picker works offline. Refreshed opportunistically.
+  team_roster: [],    // { worker_id, display_name, role, trade }
   days: {},           // `${project_id}:${work_date}` -> {status, submitted_at, submitted_by}
   settings: { lang: "en", recorded_by: "", lastPhase: null, lastArea: null, wifiOnlyPhotos: false, remindEndOfDay: false, reminderTime: "17:00" },
 };
@@ -85,7 +89,38 @@ async function doPersist() {
   } catch {
     // Never throw out of a capture path. The in-memory copy stays valid and the
     // next successful persist writes everything (single-blob store).
+    //
+    // WEB: the usual cause is the localStorage quota — and a single-blob store
+    // means a failed write silently drops EVERYTHING captured since the last
+    // success (zero-loss violation). Shed image weight and retry: synced
+    // photos first (the server already holds their binary), then unsynced
+    // ones down to a smaller-but-real copy.
+    if (Platform.OS !== "web") return;
+    if (await shedPhotoWeight()) {
+      try {
+        await AsyncStorage.setItem(KEY, JSON.stringify(state));
+      } catch (e) {
+        console.error("field-store: persist still failing after photo shrink", e);
+      }
+    }
   }
+}
+
+async function shedPhotoWeight() {
+  let changed = false;
+  for (const p of state.photos) {
+    if (typeof p.uri !== "string" || !p.uri.startsWith("data:image")) continue;
+    // Synced → a thumbnail is all the phone still owes the user. Unsynced →
+    // the binary is still the only copy in existence; shrink, never drop.
+    const smaller = p.synced_at
+      ? await shrinkDataUri(p.uri, 320, 0.5)
+      : await shrinkDataUri(p.uri, 1024, 0.55);
+    if (smaller) {
+      p.uri = smaller;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 function stamp(entry) {
@@ -452,6 +487,22 @@ export function dayStatus(work_date) {
   return state.days[dayKey(work_date)]?.status ?? "draft";
 }
 
+// Latest submission time for the day (ISO) — re-submits overwrite it, so the
+// Today banner always shows the most recent send.
+export function daySubmittedAt(work_date) {
+  return state.days[dayKey(work_date)]?.submitted_at ?? null;
+}
+
+// ------------------------------------------------------------- team roster
+export function teamRoster() {
+  return state.team_roster ?? [];
+}
+
+export async function setTeamRoster(workers) {
+  state.team_roster = (workers ?? []).filter((w) => w?.worker_id && w?.display_name);
+  await persist();
+}
+
 export function pendingCount() {
   // Everything unsynced counts — the badge the crew watches (Tech Eval §6.3).
   return (
@@ -586,20 +637,40 @@ export function crewLogStatus(refDate = todayStr()) {
   const me = activeProfile();
   const pid = state.current_project?.id;
   if (!me || me.role !== "site_manager") return { logged: [], missing: [], total: 0, loggedCount: 0 };
-  const roster = (state.profiles ?? []).filter(
-    (p) =>
+  // Roster = server registrations under our GC (synced via worker-auth
+  // `roster`) merged with device-local profiles; local wins on collision
+  // because it carries the selfie. Server coverage means crew who registered
+  // on THEIR OWN phones show up here too.
+  const byId = new Map();
+  for (const w of state.team_roster ?? []) {
+    if (w.role === "journeyman" && w.worker_id !== me.worker_id) {
+      byId.set(w.worker_id, { worker_id: w.worker_id, display_name: w.display_name, default_trade: w.trade ?? null, selfie_uri: null });
+    }
+  }
+  for (const p of state.profiles ?? []) {
+    if (
       p.role === "journeyman" &&
       p.worker_id !== me.worker_id &&
       ((p.joined_owner_ids ?? []).includes(me.worker_id) || (p.gc_account_id && p.gc_account_id === me.gc_account_id))
-  );
-  const hoursFor = (name) =>
+    ) {
+      byId.set(p.worker_id, p);
+    }
+  }
+  const roster = [...byId.values()];
+  // Hours match by hard identity first (entries picked from the roster carry
+  // worker_id), name-string as the fallback for typed-in workers.
+  const hoursFor = (w) =>
     state.lines
-      .filter((l) => l.kind === "labor" && !l.superseded_by && l.worker === name && l.project_id === pid && l.work_date === refDate)
+      .filter(
+        (l) =>
+          l.kind === "labor" && !l.superseded_by && l.project_id === pid && l.work_date === refDate &&
+          (l.worker_id === w.worker_id || l.worker === w.display_name)
+      )
       .reduce((sum, l) => sum + Number(l.hours || 0), 0);
   const logged = [];
   const missing = [];
   for (const p of roster) {
-    const hours = hoursFor(p.display_name);
+    const hours = hoursFor(p);
     const row = { worker_id: p.worker_id, name: p.display_name, trade: p.default_trade, selfie: p.selfie_uri, hours };
     (hours > 0 ? logged : missing).push(row);
   }
