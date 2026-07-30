@@ -356,6 +356,24 @@ export async function logOut() {
   await persist();
 }
 
+// Wipe EVERYTHING this device holds — profiles, projects, captured lines/photos,
+// settings — and drop the persisted blob. For handing a test/demo device to the
+// next person, or a factory reset. Cancels any pending debounced web write so it
+// can't resurrect the old blob, then writes the empty state immediately. Fresh
+// deep-cloned EMPTY so no array/object is shared with the constant.
+export async function clearAllLocal() {
+  clearTimeout(persist._t);
+  state = JSON.parse(JSON.stringify(EMPTY));
+  applyProfileContext();
+  try {
+    await AsyncStorage.removeItem(KEY);
+  } catch {
+    // Best effort — the in-memory reset already makes the app act fresh; the next
+    // persist overwrites the blob with the empty state anyway.
+  }
+  return state;
+}
+
 export function activeProfile() {
   return state?.profiles.find((x) => x.worker_id === state.active_worker_id) ?? null;
 }
