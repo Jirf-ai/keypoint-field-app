@@ -270,6 +270,7 @@ export default function App() {
             }}
             onEditLine={editLineNav}
             onProjectChange={() => setTick(tick + 1)}
+            onOpenProjects={() => setDrawerOpen(true)}
           />
         )}
         {authed && screen === "item" && (
