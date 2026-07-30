@@ -41,3 +41,4 @@ leave test data in pilot tables.
 
 | Date | Device | Build | Result |
 |---|---|---|---|
+| 2026-07-29 | none — server half only | `b25dadd` via live `sync-field-log` v4 | **10/10 PASS.** Steps 7, 8, 9 and the SF-02 FK ordering, driven by a harness posting client-shaped payloads to the live endpoint on test project `56982d06` (2825 Majestic), never 1257. Proven: a full offline day lands exactly once; an identical replay (force-quit mid-sync) creates zero duplicates; a metadata-only photo later fills `storage_path` on the same `photo_id`; a bad row fails alone and is reported back while its batch-mates land; an incident and its photo link in one round; submit → late entry reads `amended`. Rows and the test GC account deleted after; row counts back to baseline. Steps 1–6 (real device, force-quit, phone restart, airplane mode, camera, GPS) STILL NOT RUN — they need a phone. |
