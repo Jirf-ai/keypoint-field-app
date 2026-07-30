@@ -4,9 +4,9 @@
 // submit, and raise change orders.
 import { useEffect, useRef } from "react";
 import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import ProjectPicker from "../components/ProjectPicker";
+import { parseProject } from "../components/ProjectPicker";
 import { isSyncing } from "../sync";
-import { Btn, Card, CaptureTiles, EmptyState, GroupLabel, LedgerRow, Muted, usd, usdCents } from "../components/ui";
+import { Btn, Card, CaptureTiles, EmptyState, GroupLabel, LedgerRow, Muted, ProjectPlate, usd, usdCents } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import {
   activeProfile,
@@ -17,8 +17,6 @@ import {
   incidentsFor,
   myWeekHours,
   photosFor,
-  recentProjects,
-  setCurrentProject,
   visibleLines,
   visibleTotals,
 } from "../store";
@@ -46,8 +44,9 @@ function UpdatingSpinner({ t }) {
   );
 }
 
-export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, onFillPhoto, onEditLine, onProjectChange }) {
+export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, onFillPhoto, onEditLine, onProjectChange, onOpenProjects }) {
   const project = currentProject();
+  const projectMeta = project ? parseProject(project) : null;
   // Role-scoped: crew see only their own hours/wage; materials and other
   // workers' labor are the site manager's view (see visibleLines in store).
   const lines = visibleLines(workDate);
@@ -78,20 +77,25 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
 
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
-      <View style={{ zIndex: 100 }}>
-        <ProjectPicker
-          t={t}
-          current={project}
-          recents={recentProjects()}
-          role={activeProfile()?.role}
-          dateLabel={dateLabel + statusTag}
-          onAddProject={() => nav("addproject")}
-          onJoin={() => nav("joinlist")}
-          onSelect={async (p) => {
-            await setCurrentProject(p);
-            onProjectChange?.();
-          }}
-        />
+      {/* The plate opens the projects drawer (the single place to switch, add,
+          or see your team code). No inline dropdown — that lived here before and
+          duplicated the drawer. */}
+      <View>
+        {project ? (
+          <ProjectPlate
+            code={projectMeta.code}
+            name={projectMeta.display}
+            role={activeProfile()?.role}
+            city={projectMeta.city}
+            date={dateLabel + statusTag}
+            onPress={onOpenProjects}
+          />
+        ) : (
+          <Pressable onPress={onOpenProjects} style={s.projectSlot} accessibilityRole="button" accessibilityLabel={t("findProject")}>
+            <Text style={s.projectSlotTitle}>{t("findProject")}</Text>
+            <Text style={s.projectSlotSub}>{t("findProjectSub")}</Text>
+          </Pressable>
+        )}
       </View>
 
       {/* No project: the date rides its own row (the plate carries it otherwise). */}
@@ -274,6 +278,21 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
 const s = StyleSheet.create({
   todayRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", paddingHorizontal: 14, marginTop: 14 },
   todayBig: { fontFamily: fonts.display, fontSize: 19, fontWeight: "700", letterSpacing: -0.3, color: colors.text },
+  // No-project prompt (opens the projects drawer). Same dashed-orange look the
+  // old picker slot used, so nothing shifts visually.
+  projectSlot: {
+    backgroundColor: "#d95a1f0d",
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "rgba(217,90,31,0.5)",
+    borderRadius: 14,
+    marginHorizontal: 14,
+    paddingVertical: 18,
+    paddingHorizontal: 14,
+    alignItems: "center",
+  },
+  projectSlotTitle: { fontFamily: fonts.display, fontSize: 17, fontWeight: "700", color: colors.accent },
+  projectSlotSub: { fontFamily: fonts.body, fontSize: 12.5, color: colors.textMuted, marginTop: 3, textAlign: "center" },
   pending: {
     alignSelf: "flex-start",
     flexDirection: "row",
