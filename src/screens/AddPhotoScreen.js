@@ -9,8 +9,8 @@ import { File, Paths } from "expo-file-system";
 import { refreshLocation } from "../location";
 import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, PickerRow, StickyFooter, preferred } from "../components/ui";
 import { phaseLabel } from "../i18n";
-import { PHASES, photoFilename } from "../schema";
-import { activeLines, addPhoto, currentAreas, getSettings, nextPhotoSeq } from "../store";
+import { PHASES, photoFilename, projectCode } from "../schema";
+import { activeLines, addPhoto, currentAreas, currentProject, getSettings, nextPhotoSeq } from "../store";
 import { colors, fonts, type } from "../theme";
 
 const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"]);
@@ -55,8 +55,9 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
     // Force a fresh fix for the geotag (also warms the cache for line stamps).
     const gps = await refreshLocation({ maxAgeMs: 0 });
     let seq = nextPhotoSeq(workDate);
+    const code = projectCode(currentProject()?.name);
     for (const a of assets) {
-      const filename = photoFilename(workDate, seq++);
+      const filename = photoFilename(code, workDate, seq++);
       let storedUri = a.uri;
       if (Platform.OS !== "web") {
         try {

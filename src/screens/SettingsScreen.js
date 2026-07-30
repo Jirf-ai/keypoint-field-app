@@ -6,20 +6,13 @@
 import { useState } from "react";
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { Btn, Card, ChipWall, Field, GroupLabel, Muted, StackedFooter } from "../components/ui";
-import { PROJECT } from "../schema";
+import { parseProject } from "../components/ProjectPicker";
 import { copyToClipboard } from "../util";
 import { syncReminders } from "../notifications";
-import { activeProfile, gcAccount, getSettings, saveSettings } from "../store";
+import { activeProfile, currentProject, gcAccount, getSettings, myProjects, saveSettings } from "../store";
 
 const REMINDER_TIMES = ["15:00", "16:00", "17:00", "18:00", "19:00"];
 import { colors, fonts, type } from "../theme";
-
-const SPEC = [
-  ["GC", PROJECT.gc_of_record],
-  ["LIC", PROJECT.gc_license],
-  ["PM", PROJECT.pm_entity],
-  ["PMT", PROJECT.permits.join(" · ")],
-];
 
 export default function SettingsScreen({ t, onDone, onLogout }) {
   const me = activeProfile();
@@ -32,6 +25,13 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
   const [remindTime, setRemindTime] = useState(st.reminderTime || "17:00");
   const [remindDenied, setRemindDenied] = useState(false);
   const gc = gcAccount();
+  // The read-only record shows the REAL project the worker is on (from the
+  // store) and their REAL company — never a hardcoded sample. Hidden until a
+  // project is selected.
+  const cur = currentProject();
+  const proj = cur ? parseProject(cur) : null;
+  const owned = cur ? myProjects().find((p) => p.id === cur.id) : null;
+  const company = gc?.business_name || me?.gc_business || null;
 
   function changeName(x) {
     setName(x);
@@ -149,23 +149,27 @@ export default function SettingsScreen({ t, onDone, onLogout }) {
           </Card>
         )}
 
-        {/* read-only project record */}
-        <Card>
-          <View style={s.recHead}>
-            <Text style={type.projectCode}>{PROJECT.project_id}</Text>
-            <Text style={s.recRO}>{t("readOnlyRecords")}</Text>
-          </View>
-          <Text style={s.recName}>{PROJECT.name}</Text>
-          <Text style={s.recAddr}>{PROJECT.address}</Text>
-          <View style={s.spec}>
-            {SPEC.map(([k, v]) => (
-              <View key={k} style={s.specRow}>
-                <Text style={s.specKey}>{k}</Text>
-                <Text style={s.specVal}>{v}</Text>
+        {/* read-only project record — the real current project + company */}
+        {cur && (
+          <Card>
+            <View style={s.recHead}>
+              <Text style={type.projectCode}>{proj.code}</Text>
+              <Text style={s.recRO}>{t("readOnlyRecords")}</Text>
+            </View>
+            <Text style={s.recName}>{proj.display}</Text>
+            {(owned?.address || proj.address) ? (
+              <Text style={s.recAddr}>{owned?.address || proj.address}</Text>
+            ) : null}
+            {company ? (
+              <View style={s.spec}>
+                <View style={s.specRow}>
+                  <Text style={s.specKey}>GC</Text>
+                  <Text style={s.specVal}>{company}</Text>
+                </View>
               </View>
-            ))}
-          </View>
-        </Card>
+            ) : null}
+          </Card>
+        )}
       </ScrollView>
 
       <StackedFooter>

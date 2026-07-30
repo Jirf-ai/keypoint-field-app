@@ -4,25 +4,20 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { searchProjects } from "../api";
+import { projectCode } from "../schema";
 import { Card, Field, Muted, ProjectPlate, StatusPill } from "./ui";
 import { myProjects, myShareCode } from "../store";
 import { colors, fonts, radius, type } from "../theme";
 
 // Records returns { id, name, status }. The plate wants a code, a clean display
-// name (address suffix dropped) and a city — derive them here. The 1257 pilot
-// is special-cased to its real project record; address-style names are parsed.
+// name (address suffix dropped) and a city — derive them here from the real
+// project name (code derivation shared with schema.projectCode).
 export function parseProject(p) {
   const name = p?.name ?? "";
-  const low = name.toLowerCase();
-  if (low.includes("1257") || low.includes("bao") || low.includes("inspiration")) {
-    return { code: "1257-INSP", display: "Bao Residence — Main Addition", city: "West Covina", address: "1257 Inspiration Point, West Covina, CA 91791" };
-  }
   const parts = name.split(",").map((x) => x.trim());
   const street = parts[0] || name;
   const city = parts[1] || "";
-  const m = street.match(/^(\d+)\s+([A-Za-z]+)/);
-  const code = m ? `${m[1]}-${m[2].slice(0, 3).toUpperCase()}` : name.replace(/[^A-Za-z0-9]/g, "").slice(0, 6).toUpperCase();
-  return { code, display: street, city, address: name };
+  return { code: projectCode(name), display: street, city, address: name };
 }
 
 function statusColor(status) {
