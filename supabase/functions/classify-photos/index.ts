@@ -8,18 +8,20 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// classify-photos — back-fills field_photos.photo_kind on photos the crew
-// didn't tag (NULL = pre-feature rows and skipped toggles). A receipt is
-// visually unmistakable, so a single cheap vision call per photo settles it;
-// crew-set values are never touched (query filters photo_kind IS NULL).
+// classify-photos — one vision pass per photo does two jobs:
+//   1. back-fill field_photos.photo_kind where the crew didn't tag (NULL),
+//   2. read receipts — vendor, total, invoice # — into the receipt_* columns
+//      (v2), so the SM's item form can prefill the paper trail.
+// Crew-set photo_kind is never overwritten; crew-tagged receipts still get
+// the extraction pass (queued until receipt_scanned_at is stamped — stamped
+// even when nothing was readable, so unreadable receipts leave the queue).
 //
 // Body: { limit?: number (default 10, max 25) }
-// Response: { classified: [{photo_id, photo_kind}], skipped: [{photo_id, reason}],
-//             remaining: number }
+// Response: { classified: [{photo_id, photo_kind, vendor?, total?, invoice?}],
+//             skipped: [{photo_id, reason}], remaining: number }
 //
-// Needs the ANTHROPIC_API_KEY secret on the project; returns a clear error
-// when it's missing. Designed to be invoked on a schedule (pg_cron) or
-// manually — idempotent either way, since classified rows leave the queue.
+// Needs the ANTHROPIC_API_KEY secret; errors clearly when missing. Invoked
+// hourly by pg_cron (job classify-photos-hourly) — idempotent.
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
   if (req.method !== "POST") return new Response("POST only", { status: 405, headers: CORS_HEADERS });
@@ -39,16 +41,17 @@ Deno.serve(async (req) => {
   );
   const anthropic = new Anthropic({ apiKey });
 
+  const QUEUE = "photo_kind.is.null,and(photo_kind.eq.receipt,receipt_scanned_at.is.null)";
   const { data: photos, error: qErr } = await supabase
     .from("field_photos")
-    .select("photo_id, storage_path")
-    .is("photo_kind", null)
+    .select("photo_id, storage_path, photo_kind")
+    .or(QUEUE)
     .is("deleted_at", null)
     .not("storage_path", "is", null)
     .limit(limit);
   if (qErr) return json({ error: qErr.message }, 500);
 
-  const classified: { photo_id: string; photo_kind: string }[] = [];
+  const classified: Record<string, unknown>[] = [];
   const skipped: { photo_id: string; reason: string }[] = [];
 
   for (const p of photos ?? []) {
@@ -62,11 +65,11 @@ Deno.serve(async (req) => {
     const b64 = encodeBase64(await file.arrayBuffer());
 
     try {
-      // Haiku: a receipt-vs-jobsite call is trivial classification — the cheap
-      // tier is the deliberate choice here, per the feature plan.
+      // Haiku: classify + read in one call — receipt-vs-jobsite is trivial,
+      // and receipt text extraction is well within its vision range.
       const response = await anthropic.messages.create({
         model: "claude-haiku-4-5",
-        max_tokens: 128,
+        max_tokens: 256,
         messages: [{
           role: "user",
           content: [
@@ -76,7 +79,10 @@ Deno.serve(async (req) => {
               text: "This photo was taken by a construction crew. Classify it: " +
                 "'receipt' if it shows a purchase receipt, invoice, or similar paper record " +
                 "(store receipt, delivery ticket, packing slip); 'work' for anything else " +
-                "(jobsite conditions, work in progress, materials in place, people, equipment).",
+                "(jobsite conditions, work in progress, materials in place, people, equipment). " +
+                "If it is a receipt, also read off it: the vendor/store name, the final total " +
+                "amount, and the invoice/receipt number. Use an empty string (or 0 for the " +
+                "total) for anything you cannot read confidently.",
             },
           ],
         }],
@@ -85,8 +91,13 @@ Deno.serve(async (req) => {
             type: "json_schema",
             schema: {
               type: "object",
-              properties: { kind: { type: "string", enum: ["work", "receipt"] } },
-              required: ["kind"],
+              properties: {
+                kind: { type: "string", enum: ["work", "receipt"] },
+                vendor: { type: "string" },
+                total: { type: "number" },
+                invoice: { type: "string" },
+              },
+              required: ["kind", "vendor", "total", "invoice"],
               additionalProperties: false,
             },
           },
@@ -97,18 +108,28 @@ Deno.serve(async (req) => {
         continue;
       }
       const text = response.content.find((b) => b.type === "text");
-      const kind = text ? (JSON.parse(text.text) as { kind: string }).kind : null;
-      if (kind !== "work" && kind !== "receipt") {
+      const out = text ? JSON.parse(text.text) as { kind: string; vendor: string; total: number; invoice: string } : null;
+      if (!out || (out.kind !== "work" && out.kind !== "receipt")) {
         skipped.push({ photo_id: p.photo_id, reason: "no classification in response" });
         continue;
       }
-      const { error: upErr } = await supabase
-        .from("field_photos")
-        .update({ photo_kind: kind })
-        .eq("photo_id", p.photo_id)
-        .is("photo_kind", null); // never overwrite a crew tag that raced in
+      // Crew tag wins: an already-tagged receipt keeps its kind; extraction
+      // uses the crew's tag, not the model's, to decide what to write.
+      const kind = p.photo_kind ?? out.kind;
+      const patch: Record<string, unknown> = {};
+      if (p.photo_kind === null) patch.photo_kind = out.kind;
+      if (kind === "receipt") {
+        patch.receipt_vendor = out.vendor.trim() || null;
+        patch.receipt_total = out.total > 0 ? out.total : null;
+        patch.receipt_invoice = out.invoice.trim() || null;
+        patch.receipt_scanned_at = new Date().toISOString();
+      }
+      let q = supabase.from("field_photos").update(patch).eq("photo_id", p.photo_id);
+      // Never overwrite a crew tag that raced in while we were classifying.
+      if (p.photo_kind === null) q = q.is("photo_kind", null);
+      const { error: upErr } = await q;
       if (upErr) skipped.push({ photo_id: p.photo_id, reason: upErr.message });
-      else classified.push({ photo_id: p.photo_id, photo_kind: kind });
+      else classified.push({ photo_id: p.photo_id, photo_kind: kind, ...(kind === "receipt" ? { vendor: patch.receipt_vendor, total: patch.receipt_total, invoice: patch.receipt_invoice } : {}) });
     } catch (e) {
       skipped.push({ photo_id: p.photo_id, reason: e instanceof Error ? e.message : String(e) });
     }
@@ -117,7 +138,7 @@ Deno.serve(async (req) => {
   const { count } = await supabase
     .from("field_photos")
     .select("photo_id", { count: "exact", head: true })
-    .is("photo_kind", null)
+    .or(QUEUE)
     .is("deleted_at", null)
     .not("storage_path", "is", null);
 

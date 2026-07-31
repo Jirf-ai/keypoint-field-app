@@ -5,7 +5,7 @@
 // account; copy to hand to the crew — workers can't register without it).
 import { useState } from "react";
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import { Btn, Card, ChipWall, Field, GroupLabel, Muted, StackedFooter } from "../components/ui";
+import { Btn, Card, ChipWall, Field, GroupLabel, Muted, Segmented, StackedFooter } from "../components/ui";
 import { parseProject } from "../components/ProjectPicker";
 import { copyToClipboard } from "../util";
 import { syncReminders } from "../notifications";
@@ -34,6 +34,7 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
   const [remindStart, setRemindStart] = useState(!!st.remindStartOfDay);
   const [startTime, setStartTime] = useState(st.startReminderTime || "06:30");
   const [payroll, setPayroll] = useState({ busy: false, msg: null });
+  const [payrollWeek, setPayrollWeek] = useState("this"); // "this" | "last"
   const gc = gcAccount();
   // The read-only record shows the REAL project the worker is on (from the
   // store) and their REAL company — never a hardcoded sample. Hidden until a
@@ -98,7 +99,12 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
     setPayroll({ busy: true, msg: null });
     try {
       const gcCode = gc?.gc_code || me?.gc_code;
-      const res = await call("payroll-export", { gc_code: gcCode, week_of: todayStr() });
+      // Any date inside the target week works — last week = today minus 7 days.
+      const ref = new Date();
+      if (payrollWeek === "last") ref.setDate(ref.getDate() - 7);
+      const p = (n) => String(n).padStart(2, "0");
+      const week_of = `${ref.getFullYear()}-${p(ref.getMonth() + 1)}-${p(ref.getDate())}`;
+      const res = await call("payroll-export", { gc_code: gcCode, week_of });
       if (!res.ok || !res.csv) {
         setPayroll({ busy: false, msg: t(res.workers ? "payrollNone" : "payrollFailed") });
         return;
@@ -213,7 +219,15 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
           <Card>
             <GroupLabel>{t("payrollTitle")}</GroupLabel>
             <Muted style={{ marginBottom: 10 }}>{t("payrollHint")}</Muted>
-            <Btn label={payroll.busy ? t("saving") : `⇩  ${t("payrollExport")}`} onPress={exportPayroll} variant="outline" disabled={payroll.busy} />
+            <View style={{ marginBottom: 10 }}>
+              <Segmented
+                options={["this", "last"]}
+                value={payrollWeek}
+                onChange={setPayrollWeek}
+                renderLabel={(k) => (k === "this" ? t("thisWeek") : t("lastWeek"))}
+              />
+            </View>
+            <Btn label={payroll.busy ? t("saving") : `⇩  ${t("payrollExportCsv")}`} onPress={exportPayroll} variant="outline" disabled={payroll.busy} />
             {payroll.msg && <Muted style={{ marginTop: 8 }}>{payroll.msg}</Muted>}
           </Card>
         )}

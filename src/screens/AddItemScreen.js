@@ -4,8 +4,9 @@
 // pre-selects a sensible default for the phase (PRD Appendix #2). Opening with an
 // existing line in `editing` prefills the form and saves an append-only
 // correction (amendLine) instead of a new row.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image, StyleSheet, Switch, Text, View } from "react-native";
+import { call } from "../api";
 import BarcodeScanner from "../components/BarcodeScanner";
 import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, MathStrip, Muted, NoticeCard, NumericField, PickerRow, StickyFooter, preferred } from "../components/ui";
 import { phaseLabel } from "../i18n";
@@ -83,6 +84,31 @@ export default function AddItemScreen({ t, lang, workDate, onDone, fromPhoto, ed
   // Filling from a 🧾 receipt: the paper trail stops being "optional" — the
   // vendor and invoice # are sitting right there on the photo.
   const isReceipt = fromPhoto?.photo_kind === "receipt";
+
+  // Receipt OCR prefill (2026-07-31): once a receipt has synced, the
+  // classifier reads vendor / total / invoice off it server-side. Fetch that
+  // and fill only EMPTY fields — the SM's typing always wins, and offline
+  // (or unscanned) the form is exactly what it was. setters via ref so the
+  // effect never clobbers keystrokes that landed while the fetch ran.
+  const filled = useRef(false);
+  useEffect(() => {
+    if (!isReceipt || !fromPhoto?.synced_at || editing || filled.current) return;
+    let alive = true;
+    call("photo-extract", { photo_id: fromPhoto.photo_id })
+      .then((r) => {
+        if (!alive || !r.ok || !r.scanned || filled.current) return;
+        filled.current = true;
+        if (r.vendor) setVendor((v) => v || r.vendor);
+        if (r.invoice) setInvoice((v) => v || r.invoice);
+        if (r.total > 0) {
+          setCost((v) => v || String(r.total));
+          setQty((v) => v || "1");
+        }
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Changing the phase re-suggests its default class — unless the user already
   // picked one by hand (or we're editing an existing line).

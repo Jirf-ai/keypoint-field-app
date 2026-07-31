@@ -31,6 +31,21 @@ export default function ReviewScreen({ t, lang, workDate, onDone }) {
 
   const [celebrating, setCelebrating] = useState(false);
 
+  // Clock-era review flags (2026-07-31): the day clock records as-is and the
+  // SM is the editor — so days that need that editor's eye must be findable
+  // here, not buried in the ledger. Flag overtime (auto-split over 8h) and
+  // long days (>12h — usually a forgotten clock).
+  const byWorker = new Map();
+  for (const l of lines) {
+    if (l.kind !== "labor") continue;
+    const cur = byWorker.get(l.worker) ?? { worker: l.worker, hours: 0, overtime: 0, fromClock: false };
+    cur.hours += Number(l.hours || 0);
+    if (l.hour_type === "overtime") cur.overtime += Number(l.hours || 0);
+    if (l.clock_id) cur.fromClock = true;
+    byWorker.set(l.worker, cur);
+  }
+  const flagged = [...byWorker.values()].filter((w) => w.overtime > 0 || w.hours > 12);
+
   async function submit() {
     buzz(35); // acknowledge the tap before anything else happens
     await submitDay(workDate);
@@ -68,6 +83,19 @@ export default function ReviewScreen({ t, lang, workDate, onDone }) {
         ))}
       </View>
 
+      {flagged.length > 0 && (
+        <NoticeCard tone="warn" title={t("reviewFlagsTitle")}>
+          {flagged.map((w) => (
+            <Text key={w.worker} style={s.flagRow}>
+              {w.fromClock ? "⏱ " : ""}{w.worker} — {w.hours.toFixed(2)}h
+              {w.overtime > 0 ? `  ·  ${w.overtime.toFixed(2)}h ${t("overtime").toLowerCase()}` : ""}
+              {w.hours > 12 ? `  ·  ${t("reviewLongDay")}` : ""}
+            </Text>
+          ))}
+          <Muted style={{ marginTop: 8 }}>{t("reviewFlagsHint")}</Muted>
+        </NoticeCard>
+      )}
+
       <NoticeCard tone="warn" title={t("thisLocksDay")}>
         <Muted>{t("lockBody")}</Muted>
       </NoticeCard>
@@ -87,4 +115,5 @@ const s = StyleSheet.create({
   statValue: { fontFamily: fonts.mono, fontSize: 18, fontWeight: "700", color: colors.text, marginTop: 3, fontVariant: ["tabular-nums"] },
   classRow: { flexDirection: "row", alignItems: "center", gap: 11, borderTopWidth: 1, borderTopColor: colors.border, marginTop: 14, paddingTop: 12 },
   className: { flex: 1, fontFamily: fonts.body, fontSize: 14, fontWeight: "600", color: colors.text },
+  flagRow: { fontFamily: fonts.body, fontSize: 13.5, fontWeight: "600", color: colors.amber, lineHeight: 21, fontVariant: ["tabular-nums"] },
 });
