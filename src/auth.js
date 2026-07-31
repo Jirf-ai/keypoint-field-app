@@ -19,6 +19,13 @@ export async function fetchTeamRoster(gc_code) {
   return call("worker-auth", { action: "roster", gc_code });
 }
 
+// The server's memory of which projects this worker is on (every pick is
+// remembered via remember-project) — the restore path reseeds the drawer
+// from this so a wiped device doesn't cost the worker their project list.
+export async function fetchMyProjects(worker_id) {
+  return call("worker-auth", { action: "my-projects", worker_id });
+}
+
 // Client-generated worker id, pre-allocated before verify so the same id is used
 // server-side (worker-auth) and locally (createProfile) — one stable identity.
 export function newWorkerId() {

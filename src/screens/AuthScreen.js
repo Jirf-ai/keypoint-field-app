@@ -17,8 +17,8 @@ import { Btn, Card, ChipWall, Field, GroupLabel, Muted, preferred } from "../com
 import { call } from "../api";
 import { REQUIRE_PHONE_VERIFICATION, TRADES } from "../schema";
 import { copyToClipboard } from "../util";
-import { newWorkerId, sendOtp, verifyOtp } from "../auth";
-import { createProfile, gcAccount, joinByCode, logIn, profiles, restoreProfile, setGcAccount } from "../store";
+import { fetchMyProjects, newWorkerId, sendOtp, verifyOtp } from "../auth";
+import { createProfile, gcAccount, joinByCode, logIn, profiles, restoreProfile, seedRestoredProjects, setGcAccount } from "../store";
 import { colors, fonts, type } from "../theme";
 
 const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
@@ -275,6 +275,7 @@ export default function AuthScreen({ t, lang, onDone }) {
     }
     if (r.accounts && r.accounts.length > 0) {
       const p = await restoreProfile(r.accounts[0], ph);
+      await reseedProjects(p.worker_id);
       onDone(p, { welcomeBack: true }); // the "Welcome back, NAME" moment
       return;
     }
@@ -287,7 +288,19 @@ export default function AuthScreen({ t, lang, onDone }) {
   // Picker tap: the OTP already proved the phone — restoring is instant.
   async function lgPickAccount(account) {
     const p = await restoreProfile(account, lgPhone.replace(/\D/g, ""));
+    await reseedProjects(p.worker_id);
     onDone(p, { welcomeBack: true });
+  }
+
+  // Their drawer comes back with their account: the server remembered every
+  // project pick, so the restored login lands on the last-used project with
+  // the full list in place — no re-searching. Best-effort (restore itself
+  // never blocks on it).
+  async function reseedProjects(worker_id) {
+    try {
+      const r = await fetchMyProjects(worker_id);
+      if (r?.ok && r.projects?.length) await seedRestoredProjects(r.projects);
+    } catch { /* offline restore still works — the drawer refills next pick */ }
   }
 
   async function pick(worker_id) {

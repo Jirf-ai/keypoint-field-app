@@ -23,6 +23,14 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 //       spelling drift). Keyed to the semi-secret gc_code, the same
 //       consent-bearing credential registration itself requires; phones are
 //       never returned.
+//   remember-project { worker_id, project_id }
+//     → { ok }   Upserts field_worker_projects (last_used = now). The client
+//       fires this on every project pick so the server remembers which
+//       projects a worker is on — the drawer list used to be device-local
+//       and vanished on wipe + phone restore (Jeffrey 2026-07-31).
+//   my-projects { worker_id }
+//     → { ok, projects: [ { id, name, status, last_used } ] }
+//       Most-recent first. The restore path reseeds the drawer from this.
 //
 // Real SMS is a flip: set TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM secrets and the
 // code is texted instead of returned. Codes are hashed at rest and expire.
@@ -213,5 +221,38 @@ Deno.serve(async (req) => {
     return json({ ok: true, workers: regs ?? [] });
   }
 
-  return json({ error: "action must be send-otp | verify-otp | roster" }, 400);
+  if (action === "remember-project") {
+    const worker_id = String(body.worker_id ?? "").trim();
+    const project_id = String(body.project_id ?? "").trim();
+    if (!worker_id || !/^[0-9a-f-]{36}$/i.test(project_id)) {
+      return json({ ok: false, error: "worker_id and a project uuid are required" }, 400);
+    }
+    const { error } = await supabase.from("field_worker_projects").upsert(
+      { worker_id, project_id, last_used: new Date().toISOString() },
+      { onConflict: "worker_id,project_id" },
+    );
+    // A bad project_id (not in Records) just doesn't stick — the client
+    // fires-and-forgets, so surface nothing scary.
+    if (error) return json({ ok: false, error: error.message }, 400);
+    return json({ ok: true });
+  }
+
+  if (action === "my-projects") {
+    const worker_id = String(body.worker_id ?? "").trim();
+    if (!worker_id) return json({ ok: false, error: "worker_id is required" }, 400);
+    const { data: rows } = await supabase.from("field_worker_projects")
+      .select("project_id, last_used, projects ( id, name, status )")
+      .eq("worker_id", worker_id)
+      .order("last_used", { ascending: false })
+      .limit(20);
+    const projects = (rows ?? [])
+      .map((r) => {
+        const p = r.projects as { id: string; name: string; status: string | null } | null;
+        return p ? { id: p.id, name: p.name, status: p.status ?? null, last_used: r.last_used } : null;
+      })
+      .filter(Boolean);
+    return json({ ok: true, projects });
+  }
+
+  return json({ error: "action must be send-otp | verify-otp | roster | remember-project | my-projects" }, 400);
 });

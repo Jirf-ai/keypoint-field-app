@@ -6,6 +6,7 @@
 // sync idempotent.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
+import { call } from "./api";
 import { areasFor, todayStr } from "./schema";
 import { lastLocation } from "./location";
 import { shrinkDataUri } from "./util";
@@ -169,7 +170,39 @@ export async function setCurrentProject(p) {
     me.recent_projects = state.recent_projects;
   }
   await persist();
+  // The server remembers every pick (worker-auth v7 field_worker_projects) so
+  // a wipe + phone restore reseeds the drawer — the list used to be
+  // device-local and vanished with the device data (Jeffrey 2026-07-31).
+  // Fire-and-forget: an offline pick is simply remembered next time.
+  if (me?.worker_id && p.id) {
+    call("worker-auth", { action: "remember-project", worker_id: me.worker_id, project_id: p.id }).catch(() => {});
+  }
   return state.current_project;
+}
+
+// Reseed after a phone-number account restore: the server's project memory
+// (my-projects, most-recent first) refills the drawer and lands the worker on
+// the project they last worked — no re-searching (Jeffrey 2026-07-31).
+export async function seedRestoredProjects(projects) {
+  const me = activeProfile();
+  const rows = (projects ?? []).map((p) => ({ id: p.id, name: p.name, status: p.status ?? null }));
+  if (!me || rows.length === 0) return;
+  if (me.role === "site_manager") {
+    // SMs get real list rows back (copy-code chip, ✕ housekeeping).
+    const owned = state.owned_projects ?? (state.owned_projects = []);
+    for (const r of rows) {
+      if (!owned.find((x) => x.id === r.id)) {
+        owned.push({ ...r, address: null, areas: null, owner_id: me.worker_id, created_by: me.display_name, created_at: new Date().toISOString() });
+      }
+    }
+  }
+  // Everyone gets their recents back; crew's drawer list rides on these.
+  state.recent_projects = [
+    ...rows,
+    ...(state.recent_projects ?? []).filter((x) => !rows.find((r) => r.id === x.id)),
+  ].slice(0, RECENTS_MAX);
+  me.recent_projects = state.recent_projects;
+  await setCurrentProject(rows[0]); // persists
 }
 
 export function currentProject() {
