@@ -95,7 +95,9 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
           Platform.OS === "web" && typeof navigator !== "undefined" && navigator.serviceWorker
             ? navigator.serviceWorker.getRegistration().then((r) => r?.update())
             : Promise.resolve(),
-          new Promise((res) => setTimeout(res, 900)), // let the spin read
+          // Hold the spin ≥2s even when there's nothing to sync and no update
+          // — an instant spring-back reads as "nothing happened" (Jeffrey).
+          new Promise((res) => setTimeout(res, 2000)),
         ]);
       } catch { /* offline pull just springs back */ }
       setRefreshing(false);
