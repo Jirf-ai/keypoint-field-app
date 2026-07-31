@@ -422,6 +422,10 @@ export async function amendLine(line_id, patch) {
 export async function addPhoto(photo) {
   const p = stamp({ photo_id: uuid(), ...photo });
   state.photos.push(p);
+  // A photo added to a submitted day is new record too — mark the day
+  // amended so "Submit more!" lights back up (Jeffrey 2026-07-30).
+  const day = state.days[dayKey(p.work_date)];
+  if (day && day.status === "submitted") day.status = "amended";
   await persist();
   return p;
 }

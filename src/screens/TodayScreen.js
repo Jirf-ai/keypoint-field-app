@@ -268,7 +268,15 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
       {/* Site-manager duties, below the ledger. */}
       {isSM && (
         <View style={s.smActions}>
-          <Btn label={t(status !== "draft" ? "submitMore" : "review")} onPress={() => nav("review")} variant="green" disabled={lines.length === 0} />
+          {/* Three states: draft → "Review & submit day"; amended (new
+              entries since submit) → "Submit more!"; submitted with nothing
+              new → faded "Day submitted", nothing to send. */}
+          <Btn
+            label={t(status === "amended" ? "submitMore" : status === "submitted" ? "submitted" : "review")}
+            onPress={() => nav("review")}
+            variant="green"
+            disabled={lines.length === 0 || status === "submitted"}
+          />
           <Btn label={t("changeOrders")} onPress={() => nav("cos")} variant="outline" style={{ minHeight: 48 }} />
         </View>
       )}
