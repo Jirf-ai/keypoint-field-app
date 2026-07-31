@@ -179,19 +179,6 @@ export default function App() {
     return () => sub?.remove?.();
   }, [workDate]);
 
-  // "Which project today?" — on the FIRST landing of a new day, a worker with
-  // 2+ projects gets the drawer opened for them once: current selection
-  // highlighted, one tap to confirm or switch. Single-project workers (the
-  // whole pilot) see nothing — a question with one answer is just friction
-  // (Jeffrey 2026-07-30).
-  useEffect(() => {
-    if (!ready || !profile || screen !== "today") return;
-    if (getSettings().lastDayPrompt === workDate) return;
-    saveSettings({ lastDayPrompt: workDate }); // once per day, even if declined
-    if (drawerProjects().length >= 2) setDrawerOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, profile, screen, workDate]);
-
   // Worker identity: no profile, no capture — first run shows log-in/create.
   const [profile, setProfile] = useState(null);
 
@@ -213,6 +200,25 @@ export default function App() {
     refreshLocation(); // warm the cache so line entries carry a recent fix
     syncReminders();   // re-arm the end-of-day nudge; drops today's once logged
   }, [ready, profile, screen]);
+
+  // "Which project today?" — on the FIRST landing of a new day, a worker with
+  // 2+ projects gets the drawer opened for them once: current selection
+  // highlighted, one tap to confirm or switch. Single-project workers (the
+  // whole pilot) see nothing — a question with one answer is just friction.
+  // MUST sit below the ready/profile/screen declarations: listing a state
+  // variable declared further down in a deps array is evaluated on first
+  // render → TDZ crash (the 2026-07-30 white screen).
+  useEffect(() => {
+    if (!ready || !profile || screen !== "today") return;
+    if (getSettings().lastDayPrompt === workDate) return;
+    saveSettings({ lastDayPrompt: workDate }); // once per day, even if declined
+    const ids = new Set();
+    const cur = currentProject();
+    if (cur?.id) ids.add(cur.id);
+    myProjects().forEach((p) => p?.id && ids.add(p.id));
+    recentProjects().forEach((p) => p?.id && ids.add(p.id));
+    if (ids.size >= 2) setDrawerOpen(true);
+  }, [ready, profile, screen, workDate]);
 
   // Live drain feedback: every acknowledged sync chunk re-renders, so the
   // pending badge counts down in real time and the "updating" spinner shows
