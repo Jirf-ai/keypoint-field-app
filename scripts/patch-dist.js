@@ -90,13 +90,37 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (url.origin !== self.location.origin) return;
   if (!url.pathname.startsWith(new URL("./", self.location.href).pathname)) return;
+
+  // Navigations are NETWORK-FIRST: the live index always references bundles
+  // that exist on the server, which kills the white-screen update race
+  // (a cached OLD index asking for a purged OLD bundle got the SPA fallback
+  // HTML back as "JavaScript"). Offline falls back to the pre-cached shell.
+  if (e.request.mode === "navigate") {
+    e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put("./index.html", copy));
+          return res;
+        })
+        .catch(() => caches.match("./index.html", { ignoreSearch: true })),
+    );
+    return;
+  }
+
+  // Assets stay cache-first (instant + offline). Never cache an HTML body
+  // for a non-navigation request — that's the SPA fallback masquerading as
+  // an asset, and executing it is exactly the white screen.
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then(
       (hit) =>
         hit ??
         fetch(e.request).then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(e.request, copy));
+          const ct = res.headers.get("content-type") || "";
+          if (res.ok && !ct.includes("text/html")) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(e.request, copy));
+          }
           return res;
         }),
     ),
