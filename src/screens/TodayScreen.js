@@ -16,6 +16,7 @@ import {
   dayStatus,
   daySubmittedAt,
   incidentsFor,
+  deletePhoto,
   myWeekHours,
   photosFor,
   updatePhotoMeta,
@@ -327,6 +328,10 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
           onClose={() => setViewPhoto(null)}
           onSave={async (meta) => {
             await updatePhotoMeta(viewPhoto.photo_id, meta);
+            setViewPhoto(null);
+          }}
+          onDelete={async () => {
+            await deletePhoto(viewPhoto.photo_id);
             setViewPhoto(null);
           }}
         />

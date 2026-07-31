@@ -107,6 +107,9 @@ function stripLocal(r) {
 
 async function photoPayload(p) {
   const row = stripLocal(p);
+  // Tombstone: no pixels travel with a deletion — the server removes its
+  // storage object and stamps deleted_at.
+  if (p.deleted) return row;
   const b64 = await readB64(p.uri);
   if (b64) row.b64 = b64;
   // No recoverable binary (dead blob: URI etc.) → sync metadata alone; the

@@ -13,10 +13,13 @@ import { colors } from "../theme";
 
 const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"]);
 
-export default function PhotoViewer({ photo, t, lang, onSave, onClose }) {
+export default function PhotoViewer({ photo, t, lang, onSave, onDelete, onClose }) {
   const [caption, setCaption] = useState(photo.caption ?? "");
   const [phase, setPhase] = useState(photo.phase ?? null);
   const [area, setArea] = useState(photo.area ?? null);
+  // Two-tap arm for delete (same pattern as the device wipe): first tap
+  // turns the button into the confirm, second tap deletes.
+  const [delArmed, setDelArmed] = useState(false);
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose} transparent={false}>
@@ -33,6 +36,13 @@ export default function PhotoViewer({ photo, t, lang, onSave, onClose }) {
           <View style={{ paddingHorizontal: 14, gap: 10, marginTop: 4 }}>
             <Btn label={t("save")} onPress={() => onSave({ caption, phase, area })} />
             <Btn label={t("cancel")} onPress={onClose} variant="outline" />
+            {onDelete && (
+              <Btn
+                label={delArmed ? t("deletePhotoArm") : t("deletePhoto")}
+                onPress={() => (delArmed ? onDelete() : setDelArmed(true))}
+                variant="destructive"
+              />
+            )}
           </View>
         </ScrollView>
       </View>

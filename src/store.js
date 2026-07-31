@@ -583,7 +583,23 @@ export function lineById(line_id) {
 
 export function photosFor(work_date) {
   const pid = state.current_project?.id;
-  return state.photos.filter((p) => p.work_date === work_date && p.project_id === pid);
+  return state.photos.filter((p) => p.work_date === work_date && p.project_id === pid && !p.deleted);
+}
+
+// Delete a shot (mistake / pocket photo — Jeffrey 2026-07-31). The pixels go
+// NOW, locally and (via the tombstone the next sync sends) from the server
+// bucket; the row survives with deleted_at as the audit trail but leaves
+// every surface. Deleting from a submitted day marks it amended.
+export async function deletePhoto(photo_id) {
+  const p = state.photos.find((x) => x.photo_id === photo_id);
+  if (!p) return;
+  p.deleted = true;
+  p.uri = null; // drop the local binary immediately
+  p.line_id = null;
+  p.synced_at = null; // queue the tombstone for the server
+  const day = state.days[dayKey(p.work_date)];
+  if (day && day.status === "submitted") day.status = "amended";
+  await persist();
 }
 
 export function dayStatus(work_date) {
