@@ -33,6 +33,12 @@ html = html.replace('src="/_expo/', 'src="./_expo/');
 if (!html.includes("viewport-fit=cover")) {
   html = html.replace("shrink-to-fit=no", "shrink-to-fit=no, viewport-fit=cover");
 }
+// maximum-scale=1 stops iOS Safari's AUTO-zoom when an input gains focus (the
+// whole app zoomed in on the drawer search — Jeffrey 2026-07-30). Safari still
+// honors user pinch-zoom regardless, so accessibility is unaffected.
+if (!html.includes("maximum-scale")) {
+  html = html.replace("viewport-fit=cover", "viewport-fit=cover, maximum-scale=1");
+}
 
 // Self-hosted fonts (scripts/fetch-fonts.js): copy into dist and link the
 // stylesheet. Same-origin means the service worker can cache them — the

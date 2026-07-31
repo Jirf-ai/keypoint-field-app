@@ -234,7 +234,8 @@ const s = StyleSheet.create({
     backgroundColor: colors.card,
     paddingHorizontal: 12,
     fontFamily: fonts.body,
-    fontSize: 14,
+    // ≥16px: anything smaller makes iOS Safari auto-zoom the page on focus.
+    fontSize: 16,
     color: colors.text,
   },
 
