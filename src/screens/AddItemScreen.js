@@ -159,6 +159,27 @@ export default function AddItemScreen({ t, lang, workDate, onDone, fromPhoto, ed
       </Card>
 
       <Card>
+        <GroupLabel right={t("optional")}>{t("paperTrail")}</GroupLabel>
+        <Field label={t("skuCode")} value={sku} onChangeText={setSku} autoCapitalize="characters" placeholder="—" style={{ marginBottom: 8 }} />
+        <Btn label={`▥  ${t("scanBarcode")}`} onPress={() => setScanning(true)} variant="outline" style={{ minHeight: 44, marginBottom: 8 }} />
+        <Field label={t("vendor")} value={vendor} onChangeText={setVendor} placeholder="—" style={{ marginBottom: 8 }} />
+        <Field label={t("invoice")} value={invoice} onChangeText={setInvoice} autoCapitalize="none" placeholder="—" />
+        {cos.length > 0 && (
+          <View style={{ marginTop: 6 }}>
+            <PickerRow
+              label={t("linkCO")}
+              value={coNo}
+              displayValue={coNo ?? t("none")}
+              options={coOptions}
+              onChange={setCoNo}
+              renderLabel={(o) => (o.code == null ? t("none") : o.short)}
+              show={6}
+            />
+          </View>
+        )}
+      </Card>
+
+      <Card>
         <GroupLabel>{t("kindOfCost")}</GroupLabel>
         <KindOfCost value={cls} onChange={pickClass} />
         <View style={{ marginTop: 14 }}>
@@ -178,27 +199,6 @@ export default function AddItemScreen({ t, lang, workDate, onDone, fromPhoto, ed
           <Switch value={est} onValueChange={setEst} trackColor={{ false: "rgba(42,38,34,0.14)", true: colors.ink }} thumbColor="#ffffff" />
           <Muted style={{ flex: 1 }}>{t("estimated")}</Muted>
         </View>
-      </Card>
-
-      <Card>
-        <GroupLabel right={t("optional")}>{t("paperTrail")}</GroupLabel>
-        <Field label={t("skuCode")} value={sku} onChangeText={setSku} autoCapitalize="characters" placeholder="—" style={{ marginBottom: 8 }} />
-        <Btn label={`▥  ${t("scanBarcode")}`} onPress={() => setScanning(true)} variant="outline" style={{ minHeight: 44, marginBottom: 8 }} />
-        <Field label={t("vendor")} value={vendor} onChangeText={setVendor} placeholder="—" style={{ marginBottom: 8 }} />
-        <Field label={t("invoice")} value={invoice} onChangeText={setInvoice} autoCapitalize="none" placeholder="—" />
-        {cos.length > 0 && (
-          <View style={{ marginTop: 6 }}>
-            <PickerRow
-              label={t("linkCO")}
-              value={coNo}
-              displayValue={coNo ?? t("none")}
-              options={coOptions}
-              onChange={setCoNo}
-              renderLabel={(o) => (o.code == null ? t("none") : o.short)}
-              show={6}
-            />
-          </View>
-        )}
       </Card>
 
       {errors.length > 0 && (
