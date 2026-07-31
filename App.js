@@ -7,6 +7,7 @@ import * as SplashScreen from "expo-splash-screen";
 import FadeTransition from "./src/components/FadeTransition";
 import LaunchSplash, { LogoRow } from "./src/components/LaunchSplash";
 import ProjectsDrawer from "./src/components/ProjectsDrawer";
+import WelcomeBack from "./src/components/WelcomeBack";
 import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
 import { activeProfile, clearAllLocal, currentProject, getSettings, load, logOut, myProjects, pendingCount, recentProjects, removeProjectFromList, saveSettings, setCurrentProject } from "./src/store";
@@ -181,6 +182,9 @@ export default function App() {
 
   // Worker identity: no profile, no capture — first run shows log-in/create.
   const [profile, setProfile] = useState(null);
+  // "Welcome back, NAME" overlay after a phone-number account restore — Today
+  // renders beneath it, and the dissolve hands them straight back to work.
+  const [welcomeName, setWelcomeName] = useState(null);
 
   useEffect(() => {
     load().then(() => {
@@ -350,11 +354,12 @@ export default function App() {
           <AuthScreen
             t={t}
             lang={lang}
-            onDone={(p) => {
+            onDone={(p, opts) => {
               setProfile(p);
               setLang(p.preferred_language ?? lang);
               setTick(tick + 1);
               setScreen("today");
+              if (opts?.welcomeBack) setWelcomeName(p.display_name);
             }}
           />
         )}
@@ -432,6 +437,9 @@ export default function App() {
           t={t}
           onFaded={() => { try { window.location.reload(); } catch { /* native never gets here */ } }}
         />
+        {welcomeName != null && (
+          <WelcomeBack t={t} name={welcomeName} onDone={() => setWelcomeName(null)} />
+        )}
       </View>
       {!splashDone && <LaunchSplash dock={dock} onDone={() => setSplashDone(true)} />}
     </SafeAreaView>

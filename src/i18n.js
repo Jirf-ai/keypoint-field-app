@@ -295,6 +295,7 @@ export const STRINGS = {
     phoneLoginTitle: "Log in with your phone",
     phoneLoginHint: "We'll send a code to restore your account on this device.",
     noAccountForPhone: "No account found for that number. Create an account instead.",
+    welcomeBack: "Welcome back,",
     devCodeNote: "Testing mode — code:",
     // GC team accounts: the GC registers first (business + consent), gets a
     // standing team code; workers can only register with it.
@@ -611,6 +612,7 @@ export const STRINGS = {
     phoneLoginTitle: "Entrar con su teléfono",
     phoneLoginHint: "Le enviaremos un código para restaurar su cuenta en este dispositivo.",
     noAccountForPhone: "No hay cuenta para ese número. Cree una cuenta.",
+    welcomeBack: "Hola de nuevo,",
     devCodeNote: "Modo de prueba — código:",
     gcEntry: "Cuenta de contratista / GC",
     gcTitle: "Contratista (GC)",
@@ -925,6 +927,7 @@ export const STRINGS = {
     phoneLoginTitle: "用手机登录",
     phoneLoginHint: "我们会发送验证码，在此设备上恢复您的账户。",
     noAccountForPhone: "该号码没有账户。请改为创建账户。",
+    welcomeBack: "欢迎回来，",
     devCodeNote: "测试模式 — 验证码：",
     gcEntry: "承包商 / GC 账户",
     gcTitle: "承包商（GC）",

@@ -268,7 +268,7 @@ export default function AuthScreen({ t, lang, onDone }) {
     if (r.gc) await setGcAccount(r.gc);
     if (r.accounts && r.accounts.length > 0) {
       const p = await restoreProfile(r.accounts[0], ph);
-      onDone(p);
+      onDone(p, { welcomeBack: true }); // the "Welcome back, NAME" moment
       return;
     }
     // A GC whose phone has no worker profile yet → show their team code and let
