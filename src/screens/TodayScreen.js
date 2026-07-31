@@ -145,6 +145,10 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
   const isSM = me?.role === "site_manager";
   const myName = me?.display_name;
   const inbox = isSM ? photos.filter((p) => !p.line_id) : [];
+  // Crew's proof strip: their OWN photos today, read-only (Jeffrey
+  // 2026-07-31 — a bare count is weak reassurance that the pixels saved;
+  // the shot itself is the proof). Dot = sync state.
+  const myPhotos = !isSM ? photos.filter((p) => p.recorded_by === myName) : [];
 
   const dateLabel = dateStamp(workDate, lang);
   const statusTag = status !== "draft" ? `  ·  ${t(status === "amended" ? "amended" : "submitted")}` : "";
@@ -289,6 +293,24 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
               <Muted style={{ marginTop: 8 }}>{t("needDetailsHint")}</Muted>
             </>
           )}
+        </Card>
+      )}
+
+      {/* Crew photo previews — display only, no pricing action (that is the
+          SM's inbox above). Green dot = synced in, orange = still waiting. */}
+      {myPhotos.length > 0 && (
+        <Card style={{ marginTop: 14 }}>
+          <GroupLabel>📷 {t("todaysPhotos")}</GroupLabel>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+            <View style={s.inboxRow}>
+              {myPhotos.map((p) => (
+                <View key={p.photo_id} style={s.crewThumbWrap}>
+                  <Image source={{ uri: p.uri }} style={s.crewThumb} resizeMode="cover" />
+                  <View style={[s.syncDot, { backgroundColor: p.synced_at ? colors.green : colors.accent }]} />
+                </View>
+              ))}
+            </View>
+          </ScrollView>
         </Card>
       )}
 
@@ -463,6 +485,10 @@ const s = StyleSheet.create({
   inboxChevron: { color: colors.accent, fontSize: 14, fontWeight: "800" },
   inboxRow: { flexDirection: "row", gap: 8 },
   inboxThumb: { width: 72, height: 72, borderRadius: 10, backgroundColor: colors.surfaceSunken, borderWidth: 2, borderColor: colors.accent },
+  // Crew proof strip: neutral border (nothing to act on), sync dot top-right.
+  crewThumbWrap: { position: "relative" },
+  crewThumb: { width: 72, height: 72, borderRadius: 10, backgroundColor: colors.surfaceSunken, borderWidth: 1, borderColor: colors.borderStrong },
+  syncDot: { position: "absolute", top: -4, right: -4, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: colors.bg },
   submittedBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#15803d14", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12 },
   submittedEmoji: { fontSize: 16 },
   submittedText: { fontFamily: fonts.display, fontSize: 15, fontWeight: "800", color: colors.green },
