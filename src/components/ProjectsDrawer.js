@@ -20,7 +20,7 @@ const ROLE_PILL = {
   journeyman: { label: "crew", color: "#15803d", bg: "#15803d18" },
 };
 
-export default function ProjectsDrawer({ open, onClose, t, profile, role, current, projects, onPick, onAdd }) {
+export default function ProjectsDrawer({ open, onClose, t, profile, role, current, projects, onPick, onAdd, onRemove }) {
   const { width } = useWindowDimensions();
   const W = Math.min(300, Math.round(Math.min(width || 380, 520) * 0.86));
   // Render only while open/animating; JS-driven animation (RN-web ignores the
@@ -39,6 +39,10 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
   const [searching, setSearching] = useState(false);
   const [noHit, setNoHit] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
+  // Remove-from-list guard: first ✕ tap arms (chip turns red "Remove?"),
+  // second tap within 2.5s removes; anything else disarms.
+  const [armedId, setArmedId] = useState(null);
+  const armTimer = useRef(null);
   const timer = useRef(null);
   useEffect(() => {
     clearTimeout(timer.current);
@@ -98,6 +102,8 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
     const m = parseProject(p);
     const isCur = p.id === current?.id;
     const active = (p.status ?? "active") === "active";
+    const inMyList = keyPrefix === "mine";
+    const armed = armedId === p.id;
     return (
       <Pressable key={`${keyPrefix}-${p.id}`} style={[s.row, isCur && s.rowCur]} onPress={() => onPick(p)} accessibilityRole="button" accessibilityLabel={m.display}>
         {isCur && <View style={s.rail} />}
@@ -122,6 +128,28 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
             }}
           >
             <Text style={s.rowCopyText}>{copiedId === p.id ? "✓" : "⧉"}</Text>
+          </Pressable>
+        )}
+        {/* SM housekeeping: remove a finished project from MY list (armed
+            two-tap; server data untouched — search brings it back anytime). */}
+        {isSM && inMyList && onRemove && (
+          <Pressable
+            hitSlop={10}
+            style={[s.rowRemove, armed && s.rowRemoveArmed]}
+            accessibilityRole="button"
+            accessibilityLabel={t("removeProject")}
+            onPress={() => {
+              clearTimeout(armTimer.current);
+              if (armed) {
+                setArmedId(null);
+                onRemove(p);
+              } else {
+                setArmedId(p.id);
+                armTimer.current = setTimeout(() => setArmedId(null), 2500);
+              }
+            }}
+          >
+            <Text style={[s.rowRemoveText, armed && s.rowRemoveTextArmed]}>{armed ? t("removeConfirm") : "✕"}</Text>
           </Pressable>
         )}
       </Pressable>
@@ -253,6 +281,10 @@ const s = StyleSheet.create({
   rowCode: { fontFamily: fonts.mono, fontSize: 10.5, color: colors.accent, fontWeight: "700", letterSpacing: 0.3 },
   rowCopy: { borderWidth: 1, borderColor: "#d95a1f44", borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: "#d95a1f0d" },
   rowCopyText: { color: colors.accent, fontSize: 12, fontWeight: "800" },
+  rowRemove: { borderWidth: 1, borderColor: "rgba(42,38,34,0.18)", borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: "transparent" },
+  rowRemoveArmed: { borderColor: "#b91c1c66", backgroundColor: "#b91c1c10" },
+  rowRemoveText: { color: colors.textMuted, fontSize: 12, fontWeight: "800" },
+  rowRemoveTextArmed: { color: colors.red, fontSize: 11 },
 
   foot: { paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border },
   action: {

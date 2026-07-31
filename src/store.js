@@ -248,6 +248,21 @@ export async function addOwnedProject({ id, name, address, status, areas }) {
   return p;
 }
 
+// Remove a project from THIS account's list (drawer housekeeping — Jeffrey
+// 2026-07-30: finished jobs get tidied away). Local-list only: everything
+// submitted stays on the server, and the project comes back via search.
+export async function removeProjectFromList(project_id) {
+  state.owned_projects = (state.owned_projects ?? []).filter((p) => p.id !== project_id);
+  state.recent_projects = (state.recent_projects ?? []).filter((p) => p.id !== project_id);
+  const me = activeProfile();
+  if (me) {
+    me.recent_projects = state.recent_projects;
+    if (me.current_project?.id === project_id) me.current_project = null;
+  }
+  if (state.current_project?.id === project_id) state.current_project = null;
+  await persist();
+}
+
 // The area tag list for the current project: the manager's configured areas if
 // they set any, otherwise the phase/name-derived residential fallback. Used by
 // every capture form so area tagging always comes from a constrained list.

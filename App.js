@@ -9,7 +9,7 @@ import LaunchSplash, { LogoRow } from "./src/components/LaunchSplash";
 import ProjectsDrawer from "./src/components/ProjectsDrawer";
 import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
-import { activeProfile, clearAllLocal, currentProject, getSettings, load, logOut, myProjects, pendingCount, recentProjects, saveSettings, setCurrentProject } from "./src/store";
+import { activeProfile, clearAllLocal, currentProject, getSettings, load, logOut, myProjects, pendingCount, recentProjects, removeProjectFromList, saveSettings, setCurrentProject } from "./src/store";
 import { refreshLocation } from "./src/location";
 import { syncReminders } from "./src/notifications";
 import { onSyncActivity, syncNow } from "./src/sync";
@@ -424,6 +424,7 @@ export default function App() {
               setTick((x) => x + 1);
             }}
             onAdd={() => { setDrawerOpen(false); setScreen("addproject"); }}
+            onRemove={async (p) => { await removeProjectFromList(p.id); setTick((x) => x + 1); }}
           />
         )}
         <AppUpdatePill
