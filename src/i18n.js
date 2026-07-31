@@ -296,6 +296,8 @@ export const STRINGS = {
     phoneLoginHint: "We'll send a code to restore your account on this device.",
     noAccountForPhone: "No account found for that number. Create an account instead.",
     welcomeBack: "Welcome back,",
+    pickAccountTitle: "Which account is yours?",
+    pickAccountHint: "This phone number has more than one account.",
     devCodeNote: "Testing mode — code:",
     // GC team accounts: the GC registers first (business + consent), gets a
     // standing team code; workers can only register with it.
@@ -613,6 +615,8 @@ export const STRINGS = {
     phoneLoginHint: "Le enviaremos un código para restaurar su cuenta en este dispositivo.",
     noAccountForPhone: "No hay cuenta para ese número. Cree una cuenta.",
     welcomeBack: "Hola de nuevo,",
+    pickAccountTitle: "¿Cuál es su cuenta?",
+    pickAccountHint: "Este número de teléfono tiene más de una cuenta.",
     devCodeNote: "Modo de prueba — código:",
     gcEntry: "Cuenta de contratista / GC",
     gcTitle: "Contratista (GC)",
@@ -928,6 +932,8 @@ export const STRINGS = {
     phoneLoginHint: "我们会发送验证码，在此设备上恢复您的账户。",
     noAccountForPhone: "该号码没有账户。请改为创建账户。",
     welcomeBack: "欢迎回来，",
+    pickAccountTitle: "哪个是您的账户？",
+    pickAccountHint: "此电话号码有多个账户。",
     devCodeNote: "测试模式 — 验证码：",
     gcEntry: "承包商 / GC 账户",
     gcTitle: "承包商（GC）",

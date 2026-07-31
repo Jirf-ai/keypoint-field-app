@@ -69,6 +69,9 @@ export default function AuthScreen({ t, lang, onDone }) {
   const [lgDev, setLgDev] = useState(false);
   const [lgErr, setLgErr] = useState(null);
   const [lgBusy, setLgBusy] = useState(false);
+  // Verified phone carrying MORE than one account → "which account?" picker
+  // (Jeffrey 2026-07-31). One account still restores straight through.
+  const [lgAccounts, setLgAccounts] = useState(null);
 
   // GC team code gate: required for every new profile; a GC session on this
   // device pre-fills its own code.
@@ -266,6 +269,10 @@ export default function AuthScreen({ t, lang, onDone }) {
     if (!r?.ok || !r.verified) { setLgErr(t("codeWrong")); return; }
     // One phone can carry a worker account and/or a GC session — restore both.
     if (r.gc) await setGcAccount(r.gc);
+    if (r.accounts && r.accounts.length > 1) {
+      setLgAccounts(r.accounts); // which account? — the phone is already proven
+      return;
+    }
     if (r.accounts && r.accounts.length > 0) {
       const p = await restoreProfile(r.accounts[0], ph);
       onDone(p, { welcomeBack: true }); // the "Welcome back, NAME" moment
@@ -275,6 +282,12 @@ export default function AuthScreen({ t, lang, onDone }) {
     // them create their own worker profile.
     if (r.gc) { setPhoneLogin(false); setGcMode("code"); return; }
     setLgErr(t("noAccountForPhone"));
+  }
+
+  // Picker tap: the OTP already proved the phone — restoring is instant.
+  async function lgPickAccount(account) {
+    const p = await restoreProfile(account, lgPhone.replace(/\D/g, ""));
+    onDone(p, { welcomeBack: true });
   }
 
   async function pick(worker_id) {
@@ -371,6 +384,46 @@ export default function AuthScreen({ t, lang, onDone }) {
 
   // ---- Log in with phone (cross-device account restore) ----
   if (phoneLogin) {
+    // Phone proven, several accounts on it → pick yours (rare shared-phone
+    // case). Rows echo the face grid; restored accounts have no selfie yet,
+    // so it's the ink initial circle + name + role/company.
+    if (lgAccounts) {
+      return (
+        <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
+          <View style={s.head}>
+            <Text style={type.screenTitle}>{t("pickAccountTitle")}</Text>
+            <Text style={s.headSub}>{t("pickAccountHint")}</Text>
+          </View>
+          <Card>
+            {lgAccounts.map((a, i) => (
+              <Pressable
+                key={a.worker_id}
+                style={[s.acctRow, i < lgAccounts.length - 1 && s.acctRowDivider]}
+                onPress={() => lgPickAccount(a)}
+                disabled={lgBusy}
+                accessibilityRole="button"
+                accessibilityLabel={a.display_name}
+              >
+                <View style={[s.faceImg, s.faceEmpty, s.acctCircle]}>
+                  <Text style={s.faceInitial}>{a.display_name?.[0] ?? "?"}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.acctName}>{a.display_name}</Text>
+                  <Text style={s.acctSub}>
+                    {a.role === "site_manager" ? t("roleSMShort") : t("roleCrewShort")}
+                    {a.gc_business ? ` · ${a.gc_business}` : ""}
+                  </Text>
+                </View>
+                <Text style={s.choiceChevron}>›</Text>
+              </Pressable>
+            ))}
+          </Card>
+          <View style={{ paddingHorizontal: 14 }}>
+            <Btn label={t("cancel")} onPress={() => { setLgAccounts(null); setPhoneLogin(false); setLgSent(false); setLgCode(""); setLgErr(null); }} variant="outline" />
+          </View>
+        </ScrollView>
+      );
+    }
     return (
       <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
         <View style={s.head}>
@@ -704,6 +757,12 @@ const s = StyleSheet.create({
   selfieTitle: { fontFamily: fonts.body, fontSize: 15, fontWeight: "700", color: colors.text },
   selfieSub: { fontFamily: fonts.body, fontSize: 12.5, color: colors.textMuted, marginTop: 3, lineHeight: 17 },
   err: { fontFamily: fonts.body, color: colors.red, marginTop: 8, fontSize: 13 },
+
+  acctRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
+  acctRowDivider: { borderBottomWidth: 1, borderBottomColor: colors.borderStrong },
+  acctCircle: { width: 52, height: 52, borderRadius: 26 },
+  acctName: { fontFamily: fonts.body, fontSize: 16, fontWeight: "700", color: colors.text },
+  acctSub: { fontFamily: fonts.body, fontSize: 13, color: colors.textMuted, marginTop: 2 },
 
   faces: { flexDirection: "row", flexWrap: "wrap", gap: 14 },
   face: { alignItems: "center", width: 86 },
