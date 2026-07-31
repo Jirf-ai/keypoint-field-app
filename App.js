@@ -179,6 +179,19 @@ export default function App() {
     return () => sub?.remove?.();
   }, [workDate]);
 
+  // "Which project today?" — on the FIRST landing of a new day, a worker with
+  // 2+ projects gets the drawer opened for them once: current selection
+  // highlighted, one tap to confirm or switch. Single-project workers (the
+  // whole pilot) see nothing — a question with one answer is just friction
+  // (Jeffrey 2026-07-30).
+  useEffect(() => {
+    if (!ready || !profile || screen !== "today") return;
+    if (getSettings().lastDayPrompt === workDate) return;
+    saveSettings({ lastDayPrompt: workDate }); // once per day, even if declined
+    if (drawerProjects().length >= 2) setDrawerOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, profile, screen, workDate]);
+
   // Worker identity: no profile, no capture — first run shows log-in/create.
   const [profile, setProfile] = useState(null);
 
