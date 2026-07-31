@@ -157,7 +157,9 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
           style={s.search}
           value={q}
           onChangeText={setQ}
-          placeholder={t("projectSearchPlaceholder")}
+          // SMs GIVE OUT project codes, they don't receive them — only crew
+          // see "or code" (Jeffrey 2026-07-30).
+          placeholder={isSM ? t("projectAddressLabel") : t("projectSearchPlaceholder")}
           placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoCorrect={false}
