@@ -52,8 +52,10 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
       </Animated.View>
 
       <Animated.View style={[s.panel, { width: W, transform: [{ translateX: x }] }]}>
-        {/* identity */}
-        <View style={s.head}>
+        {/* identity — avatar + name only; the code block gets the full drawer
+            width below (inside this narrow column the code wrapped mid-string
+            and everything read cramped). */}
+        <View style={[s.head, !(isSM && shareCode) && s.headBorder]}>
           {profile?.selfie_uri ? (
             <Image source={{ uri: profile.selfie_uri }} style={s.av} />
           ) : (
@@ -64,34 +66,35 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
               <Text style={s.name} numberOfLines={1}>{name}</Text>
               <View style={[s.pill, { backgroundColor: pill.bg }]}><Text style={[s.pillText, { color: pill.color }]}>{pill.label}</Text></View>
             </View>
-            {isSM && shareCode ? (
-              <>
-                <View style={s.shareRow}>
-                  <Text style={s.share}>{t("projectListCode")} · {shareCode}</Text>
-                  <Pressable
-                    hitSlop={8}
-                    style={s.copyChip}
-                    accessibilityRole="button"
-                    accessibilityLabel={t("copyCode")}
-                    onPress={async () => {
-                      if (await copyToClipboard(shareCode)) {
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 1600);
-                      }
-                    }}
-                  >
-                    <Text style={s.copyChipText}>{copied ? `✓ ${t("copiedCode")}` : `⧉ ${t("copyCode")}`}</Text>
-                  </Pressable>
-                </View>
-                {/* TWO codes exist and GCs must never mix them up (Jeffrey
-                    2026-07-30): this one shares the PROJECT LIST with crew who
-                    already have accounts; the company TEAM code (Settings) is
-                    what NEW crew register with. */}
-                <Text style={s.shareHint}>{t("projectListCodeHint")}</Text>
-              </>
-            ) : null}
           </View>
         </View>
+
+        {/* TWO codes exist and GCs must never mix them up (Jeffrey
+            2026-07-30): this one shares the PROJECT LIST with crew who already
+            have accounts; the company TEAM code (Settings) is what NEW crew
+            register with. Non-breaking hyphen so the code never splits. */}
+        {isSM && shareCode ? (
+          <View style={s.codeBlock}>
+            <View style={s.shareRow}>
+              <Text style={s.share}>{t("projectListCode")} · <Text style={s.shareCodeText}>{shareCode.replace("-", "‑")}</Text></Text>
+              <Pressable
+                hitSlop={8}
+                style={s.copyChip}
+                accessibilityRole="button"
+                accessibilityLabel={t("copyCode")}
+                onPress={async () => {
+                  if (await copyToClipboard(shareCode)) {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1600);
+                  }
+                }}
+              >
+                <Text style={s.copyChipText}>{copied ? `✓ ${t("copiedCode")}` : `⧉ ${t("copyCode")}`}</Text>
+              </Pressable>
+            </View>
+            <Text style={s.shareHint}>{t("projectListCodeHint")}</Text>
+          </View>
+        ) : null}
 
         <Text style={s.lbl}>{t("projectsLabel")} · {projects.length}</Text>
 
@@ -142,7 +145,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 0,
   },
-  head: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 13, borderBottomWidth: 1, borderBottomColor: colors.border },
+  head: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 13 },
+  headBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  codeBlock: { paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+  shareCodeText: { color: colors.accent, fontWeight: "700" },
   av: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surfaceSunken },
   avEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.ink },
   avInit: { fontFamily: fonts.mono, color: colors.onInk, fontSize: 15, fontWeight: "700" },
@@ -150,8 +156,8 @@ const s = StyleSheet.create({
   name: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "800", color: colors.text, flexShrink: 1 },
   pill: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 7 },
   pillText: { fontFamily: fonts.mono, fontSize: 9, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase" },
-  share: { fontFamily: fonts.mono, fontSize: 10, color: colors.textMuted },
-  shareRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 },
+  share: { fontFamily: fonts.mono, fontSize: 11, color: colors.textMuted, flexShrink: 1 },
+  shareRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   shareHint: { fontFamily: fonts.body, fontSize: 10.5, lineHeight: 14, color: colors.textMuted, marginTop: 4 },
   copyChip: { borderWidth: 1, borderColor: "#d95a1f55", borderRadius: 999, paddingVertical: 2, paddingHorizontal: 7, backgroundColor: "#d95a1f0d" },
   copyChipText: { fontFamily: fonts.body, fontSize: 10, fontWeight: "700", color: colors.accent },
