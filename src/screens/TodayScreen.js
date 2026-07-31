@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { parseProject } from "../components/ProjectPicker";
+import PhotoViewer from "../components/PhotoViewer";
 import { isSyncing, syncNow } from "../sync";
 import { Btn, Card, CaptureTiles, EmptyState, GroupLabel, LedgerRow, Muted, ProjectPlate, usd, usdCents } from "../components/ui";
 import { phaseLabel } from "../i18n";
@@ -17,6 +18,7 @@ import {
   incidentsFor,
   myWeekHours,
   photosFor,
+  updatePhotoMeta,
   visibleLines,
   visibleTotals,
 } from "../store";
@@ -145,10 +147,12 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
   const isSM = me?.role === "site_manager";
   const myName = me?.display_name;
   const inbox = isSM ? photos.filter((p) => !p.line_id) : [];
-  // Crew's proof strip: their OWN photos today, read-only (Jeffrey
-  // 2026-07-31 — a bare count is weak reassurance that the pixels saved;
-  // the shot itself is the proof). Dot = sync state.
+  // Crew's proof strip: their OWN photos today (Jeffrey 2026-07-31 — a bare
+  // count is weak reassurance that the pixels saved; the shot itself is the
+  // proof). Dot = sync state. Tap opens the viewer to fix caption/phase/area
+  // — metadata only, the pixels never change.
   const myPhotos = !isSM ? photos.filter((p) => p.recorded_by === myName) : [];
+  const [viewPhoto, setViewPhoto] = useState(null);
 
   const dateLabel = dateStamp(workDate, lang);
   const statusTag = status !== "draft" ? `  ·  ${t(status === "amended" ? "amended" : "submitted")}` : "";
@@ -304,14 +308,28 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
             <View style={s.inboxRow}>
               {myPhotos.map((p) => (
-                <View key={p.photo_id} style={s.crewThumbWrap}>
+                <Pressable key={p.photo_id} style={s.crewThumbWrap} onPress={() => setViewPhoto(p)} accessibilityRole="button" accessibilityLabel={t("todaysPhotos")}>
                   <Image source={{ uri: p.uri }} style={s.crewThumb} resizeMode="cover" />
                   <View style={[s.syncDot, { backgroundColor: p.synced_at ? colors.green : colors.accent }]} />
-                </View>
+                </Pressable>
               ))}
             </View>
           </ScrollView>
         </Card>
+      )}
+
+      {/* Tap-to-edit viewer for the proof strip: caption/phase/area only. */}
+      {viewPhoto && (
+        <PhotoViewer
+          photo={viewPhoto}
+          t={t}
+          lang={lang}
+          onClose={() => setViewPhoto(null)}
+          onSave={async (meta) => {
+            await updatePhotoMeta(viewPhoto.photo_id, meta);
+            setViewPhoto(null);
+          }}
+        />
       )}
 
       {/* The ledger — total + one row per line (§2.5). */}

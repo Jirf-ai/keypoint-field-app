@@ -487,6 +487,24 @@ export async function addPhoto(photo) {
   return p;
 }
 
+// Fix a photo's tags after the fact (crew proof strip, Jeffrey 2026-07-31):
+// caption / phase / area only — the pixels are evidence and never change.
+// Clearing synced_at re-queues it so the server copy carries the new tags
+// (same merge-upsert-on-photo_id path linkPhoto uses). Editing a submitted
+// day's photo marks the day amended, same as adding one.
+export async function updatePhotoMeta(photo_id, { caption, phase, area }) {
+  const p = state.photos.find((x) => x.photo_id === photo_id);
+  if (!p) return null;
+  if (caption !== undefined) p.caption = caption?.trim() || null;
+  if (phase !== undefined) p.phase = phase;
+  if (area !== undefined) p.area = area;
+  p.synced_at = null;
+  const day = state.days[dayKey(p.work_date)];
+  if (day && day.status === "submitted") day.status = "amended";
+  await persist();
+  return p;
+}
+
 // Attach an already-captured photo to a line created later (photo-first flow:
 // crews snap now, the site manager fills in details at end of day). Clearing
 // synced_at re-queues an already-synced photo so the link reaches the server
