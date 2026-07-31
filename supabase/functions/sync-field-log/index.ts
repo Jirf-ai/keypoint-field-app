@@ -25,6 +25,7 @@ const CORS_HEADERS = {
 //   labor?:  [labor rows; client `line_id` becomes labor_id, `worker` → worker_name],
 //   incidents?: [incident/near-miss rows (SF-02); written BEFORE photos so a
 //            photo's incident_id FK resolves in the same round],
+//   clock_events?: [day-clock start/end stamps; client `worker` → worker_name],
 //   photos?: [{ ...meta, b64? }] — b64 (data URI or raw base64) uploads to the
 //            'field-photos' bucket at {project_id}/{filename}; metadata-only
 //            rows sync with storage_path null and can re-send b64 later,
@@ -47,6 +48,7 @@ Deno.serve(async (req) => {
   const days = arr(body.days), items = arr(body.items), labor = arr(body.labor);
   const photos = arr(body.photos), change_orders = arr(body.change_orders);
   const incidents = arr(body.incidents);
+  const clock_events = arr(body.clock_events);
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -54,7 +56,7 @@ Deno.serve(async (req) => {
   );
 
   const now = new Date().toISOString();
-  const synced = { days: [] as string[], items: [] as string[], labor: [] as string[], incidents: [] as string[], photos: [] as string[], change_orders: [] as string[] };
+  const synced = { days: [] as string[], items: [] as string[], labor: [] as string[], incidents: [] as string[], photos: [] as string[], change_orders: [] as string[], clock_events: [] as string[] };
   const failed: { kind: string; id: string; error: string }[] = [];
 
   // 1. Daily logs — one row per (project, work_date) for every date seen in the
@@ -62,7 +64,7 @@ Deno.serve(async (req) => {
   //    entries also carry submit status (upsert merges — status transitions
   //    draft→submitted→amended come from the client, the single writer per day).
   const dates = new Set<string>();
-  for (const r of [...items, ...labor, ...incidents, ...photos]) if (typeof r.work_date === "string") dates.add(r.work_date);
+  for (const r of [...items, ...labor, ...incidents, ...photos, ...clock_events]) if (typeof r.work_date === "string") dates.add(r.work_date);
   const dayByDate = new Map<string, Record<string, unknown>>();
   for (const d of days) if (typeof d.work_date === "string") { dates.add(d.work_date); dayByDate.set(d.work_date, d); }
 
@@ -145,6 +147,26 @@ Deno.serve(async (req) => {
     const { error } = await supabase.from("field_incidents").upsert(row, { onConflict: "incident_id", ignoreDuplicates: true });
     if (error) failed.push({ kind: "incident", id, error: error.message });
     else synced.incidents.push(id);
+  }
+
+  // 4b. Day-clock stamps (start/end) — the attendance evidence behind
+  //     clock-sourced hours. Append-only; a start stamp survives even if the
+  //     day is never confirmed into labor lines.
+  for (const r of clock_events) {
+    const id = str(r.clock_id);
+    if (!id) { failed.push({ kind: "clock_event", id: "?", error: "clock_id missing" }); continue; }
+    const row = {
+      clock_id: id,
+      log_id: logIds.get(str(r.work_date)) ?? null,
+      project_id,
+      worker_name: r.worker_name ?? r.worker ?? null,
+      ...pick(r, ["work_date", "event", "starts", "worker_id", "at", "gps_lat", "gps_lng",
+        "recorded_by", "recorded_at", "captured_offline", "version", "supersedes"]),
+      synced_at: now,
+    };
+    const { error } = await supabase.from("field_clock_events").upsert(row, { onConflict: "clock_id", ignoreDuplicates: true });
+    if (error) failed.push({ kind: "clock_event", id, error: error.message });
+    else synced.clock_events.push(id);
   }
 
   // 5. Photos — binary (when sent) goes to storage first; the row then carries

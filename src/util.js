@@ -12,6 +12,13 @@ export function dateStamp(workDate, lang) {
 }
 
 // Short localized weekday for a date string — "Mon" / "lun" / "周一".
+// Localized clock time ("6:52 AM") from an ISO stamp — shared by the day-clock
+// strip, the End Day receipt, and the submitted banner.
+export function timeStr(iso, lang) {
+  const locale = lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US";
+  return new Date(iso).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+}
+
 export function weekdayLabel(dateStr, lang) {
   const locale = lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US";
   return new Date(dateStr + "T12:00:00").toLocaleDateString(locale, { weekday: "short" }).replace(".", "");

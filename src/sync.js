@@ -65,6 +65,8 @@ async function run() {
       // Incidents ride the rows pass (before photos) so an incident photo's
       // incident_id FK resolves server-side on the very next chunk.
       incidents: g.incidents.map(stripLocal),
+      // Day-clock stamps — attendance evidence, tiny rows.
+      clock_events: g.clock_events.map(stripLocal),
     });
     if (res.ok && res.synced) { await markSynced(res.synced, res.synced_at); ping(); }
     else if (!res.ok) throw new Error(`sync ${res.status}`);

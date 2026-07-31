@@ -45,8 +45,8 @@ const EMPTY = {
   change_orders: [],
   incidents: [],      // SF-02 safety records — any role, append-only
   // Start Day / End Day (2026-07-31): append-only clock events, the worker's
-  // attendance stamps. Device-local for now (the labor lines they produce ride
-  // the sync spine; syncing the raw events is follow-up server work).
+  // attendance stamps. Ride the sync spine like every other row
+  // (field_clock_events server-side).
   clock_events: [],   // { clock_id, event: 'start'|'end', work_date, worker_id, at }
   // Server team roster (worker_registrations under our GC), cached so the
   // record-for-someone-else picker works offline. Refreshed opportunistically.
@@ -702,7 +702,8 @@ export function pendingCount() {
     state.lines.filter((l) => !l.synced_at).length +
     state.photos.filter((p) => !p.synced_at).length +
     state.change_orders.filter((c) => !c.synced_at).length +
-    (state.incidents ?? []).filter((i) => !i.synced_at).length
+    (state.incidents ?? []).filter((i) => !i.synced_at).length +
+    (state.clock_events ?? []).filter((e) => !e.synced_at).length
   );
 }
 
@@ -713,7 +714,7 @@ export function pendingCount() {
 export function pendingByProject() {
   const groups = {};
   const g = (pid) =>
-    (groups[pid] ??= { days: [], items: [], labor: [], change_orders: [], incidents: [] });
+    (groups[pid] ??= { days: [], items: [], labor: [], change_orders: [], incidents: [], clock_events: [] });
   for (const l of state.lines.filter((x) => !x.synced_at && x.project_id)) {
     g(l.project_id)[l.kind === "labor" ? "labor" : "items"].push(l);
   }
@@ -722,6 +723,9 @@ export function pendingByProject() {
   }
   for (const i of (state.incidents ?? []).filter((x) => !x.synced_at && x.project_id)) {
     g(i.project_id).incidents.push(i);
+  }
+  for (const e of (state.clock_events ?? []).filter((x) => !x.synced_at && x.project_id)) {
+    g(e.project_id).clock_events.push(e);
   }
   // Day statuses ride along for any project already being synced (idempotent
   // upsert server-side, so re-sending submit status every time is harmless).
@@ -748,10 +752,12 @@ export async function markSynced(echo, ts) {
   const photos = new Set(echo?.photos ?? []);
   const cos = new Set(echo?.change_orders ?? []);
   const incs = new Set(echo?.incidents ?? []);
+  const clocks = new Set(echo?.clock_events ?? []);
   for (const l of state.lines) if (items.has(l.line_id)) l.synced_at = ts;
   for (const p of state.photos) if (photos.has(p.photo_id)) p.synced_at = ts;
   for (const c of state.change_orders) if (cos.has(c.co_id)) c.synced_at = ts;
   for (const i of state.incidents ?? []) if (incs.has(i.incident_id)) i.synced_at = ts;
+  for (const e of state.clock_events ?? []) if (clocks.has(e.clock_id)) e.synced_at = ts;
   await persist();
 }
 

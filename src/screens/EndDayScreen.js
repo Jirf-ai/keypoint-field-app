@@ -12,6 +12,7 @@ import { Card, EmptyState, FormScreen, GroupLabel, MathStrip, NoticeCard, Numeri
 import { phaseLabel } from "../i18n";
 import { computeClockHours, PHASES, TRADES, todayStr, validateLabor } from "../schema";
 import { activeProfile, addLine, clockEnd, currentAreas, getSettings, openClock } from "../store";
+import { timeStr } from "../util";
 import { colors, fonts, type } from "../theme";
 
 const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
@@ -19,9 +20,6 @@ const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"
 
 const FIX_KEYS = { V_trade: "fixTrade", V4_unit_cost: "fixRate", V_phase: "fixPhase", V_area: "fixArea" };
 
-const locale = (lang) => (lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US");
-const timeStr = (iso, lang) =>
-  new Date(iso).toLocaleTimeString(locale(lang), { hour: "numeric", minute: "2-digit" });
 const durStr = (min) => `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m`;
 // 8 → "8", 8.5 → "8.5", 8.25 → "8.25" — quarter-hour steps never need more.
 const hStr = (h) => String(+Number(h).toFixed(2));
@@ -119,7 +117,7 @@ export default function EndDayScreen({ t, lang, onDone }) {
           )}
           <View style={s.row}>
             <Text style={s.rowKey}>{t("roundedRow")}</Text>
-            <Text style={s.rowVal}>{durStr(Math.round((c.hours * 60) / 15) * 15)}</Text>
+            <Text style={s.rowVal}>{durStr(c.hours * 60)}</Text>
           </View>
           {c.overtime > 0 && (
             <>

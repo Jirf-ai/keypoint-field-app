@@ -28,7 +28,7 @@ import {
   visibleTotals,
 } from "../store";
 import { colors, fonts, type } from "../theme";
-import { dateStamp } from "../util";
+import { dateStamp, timeStr } from "../util";
 
 // Small spinning brand diamond + "updating" — lives inside the pending badge
 // while a sync drain is running, so a crew member knows the app is actively
@@ -50,10 +50,6 @@ function UpdatingSpinner({ t }) {
     </View>
   );
 }
-
-const locale = (lang) => (lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US");
-const timeStr = (iso, lang) =>
-  new Date(iso).toLocaleTimeString(locale(lang), { hour: "numeric", minute: "2-digit" });
 
 // Start Day / End Day (2026-07-31) — the day's frame, between the plate and
 // the capture tile. Hours come SOLELY from this clock (see EndDayScreen); the
@@ -443,12 +439,7 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
                 <Text style={s.submittedEmoji}>🎉</Text>
                 <Text style={s.submittedText}>{t("submittedJoy")}</Text>
                 {daySubmittedAt(workDate) && (
-                  <Text style={s.submittedTime}>
-                    {new Date(daySubmittedAt(workDate)).toLocaleTimeString(
-                      lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US",
-                      { hour: "numeric", minute: "2-digit" },
-                    )}
-                  </Text>
+                  <Text style={s.submittedTime}>{timeStr(daySubmittedAt(workDate), lang)}</Text>
                 )}
               </View>
             )}

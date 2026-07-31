@@ -80,6 +80,9 @@ export default function AddItemScreen({ t, lang, workDate, onDone, fromPhoto, ed
   const cos = changeOrders();
   const total = Number(qty || 0) * Number(cost || 0);
   const canSave = !!desc.trim() && qty !== "" && cost !== "";
+  // Filling from a 🧾 receipt: the paper trail stops being "optional" — the
+  // vendor and invoice # are sitting right there on the photo.
+  const isReceipt = fromPhoto?.photo_kind === "receipt";
 
   // Changing the phase re-suggests its default class — unless the user already
   // picked one by hand (or we're editing an existing line).
@@ -145,7 +148,9 @@ export default function AddItemScreen({ t, lang, workDate, onDone, fromPhoto, ed
         {fromPhoto?.uri && (
           <View style={s.photoRow}>
             <Image source={{ uri: fromPhoto.uri }} style={s.photoThumb} resizeMode="cover" />
-            <Muted style={{ flex: 1 }}>{fromPhoto.caption ?? fromPhoto.filename}</Muted>
+            <Muted style={{ flex: 1 }}>
+              {isReceipt ? "🧾 " : ""}{fromPhoto.caption ?? fromPhoto.filename}
+            </Muted>
           </View>
         )}
         <Field label={t("whatUsed")} value={desc} onChangeText={setDesc} placeholder="—" />
@@ -159,7 +164,8 @@ export default function AddItemScreen({ t, lang, workDate, onDone, fromPhoto, ed
       </Card>
 
       <Card>
-        <GroupLabel right={t("optional")}>{t("paperTrail")}</GroupLabel>
+        <GroupLabel right={isReceipt ? `🧾 ${t("kindReceipt")}` : t("optional")}>{t("paperTrail")}</GroupLabel>
+        {isReceipt && <Muted style={{ marginBottom: 10 }}>{t("receiptHint")}</Muted>}
         <Field label={t("skuCode")} value={sku} onChangeText={setSku} autoCapitalize="characters" placeholder="—" style={{ marginBottom: 8 }} />
         <Btn label={`▥  ${t("scanBarcode")}`} onPress={() => setScanning(true)} variant="outline" style={{ minHeight: 44, marginBottom: 8 }} />
         <Field label={t("vendor")} value={vendor} onChangeText={setVendor} placeholder="—" style={{ marginBottom: 8 }} />
