@@ -68,17 +68,33 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
     return () => loop.stop();
   }, [refreshing, spin]);
 
-  const touchY = (e) => e.nativeEvent.touches?.[0]?.pageY ?? e.nativeEvent.pageY;
+  const touchPt = (e) => {
+    const t0 = e.nativeEvent.touches?.[0] ?? e.nativeEvent;
+    return { x: t0.pageX ?? 0, y: t0.pageY ?? 0 };
+  };
   const onPullStart = (e) => {
+    const p = touchPt(e);
     gesture.current = scrollTop.current <= 1 && !refreshing
-      ? { startY: touchY(e), active: true }
-      : { startY: null, active: false };
+      ? { startX: p.x, startY: p.y, active: true, engaged: false }
+      : { startY: null, active: false, engaged: false };
   };
   const onPullMove = (e) => {
     const g = gesture.current;
     if (!g.active || refreshing) return;
-    const dy = touchY(e) - g.startY;
-    if (dy > 0 && scrollTop.current <= 1) pull.setValue(Math.min(110, dy * 0.5));
+    const p = touchPt(e);
+    const dy = p.y - g.startY;
+    const dx = p.x - g.startX;
+    // Direction gate: engage only on a clearly-vertical downward drag past a
+    // small dead zone — sideways swipes must never move the page (Jeffrey).
+    if (!g.engaged) {
+      if (dy > 14 && dy > Math.abs(dx) * 1.6) g.engaged = true;
+      else if (Math.abs(dx) > 18) { g.active = false; return; }
+      else return;
+    }
+    // Heavy resistance + a short leash (Instagram-feel): half-screen drags
+    // land at ~90px of stretch, not a page's worth.
+    if (dy > 0 && scrollTop.current <= 1) pull.setValue(Math.min(90, dy * 0.35));
+    else pull.setValue(0);
   };
   const onPullEnd = async () => {
     const g = gesture.current;

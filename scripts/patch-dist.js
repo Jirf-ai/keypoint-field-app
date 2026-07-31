@@ -50,6 +50,17 @@ if (fontFiles.length) {
   }
 }
 
+// Kill the native whole-page rubber-band (iOS drags the entire app hundreds
+// of px on any touch — it stacked on top of the app's own pull-to-refresh and
+// made every swipe feel hyper-sensitive). The app's ScrollView is the only
+// scroller; the document itself never moves. Idempotent.
+if (!html.includes("data-kf-overscroll")) {
+  html = html.replace("</head>", `  <style data-kf-overscroll>
+      html, body { overscroll-behavior: none; overflow: hidden; height: 100%; position: fixed; width: 100%; }
+      #root { height: 100%; overflow: hidden; }
+    </style></head>`);
+}
+
 // PWA meta + service-worker registration, once.
 if (!html.includes("apple-mobile-web-app-capable")) {
   html = html.replace("</head>", `  <meta name="apple-mobile-web-app-capable" content="yes" />
