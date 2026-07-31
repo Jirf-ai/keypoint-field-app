@@ -1,12 +1,20 @@
 // Crew today (OV-01) — which of my crew haven't logged, so the foreman can chase
 // the gap before it becomes permanently lost data (the app's whole reason to
-// exist). "Not yet" leads, because that's the actionable list. Roster is what
-// this device knows (crew who joined my code here / same GC team); a full cross-
-// device roster arrives with sync. Read-only; header back closes it.
+// exist). "On the clock" leads (live, from the server), then logged, then the
+// actionable not-yet list.
+//
+// Two sources merged by worker_id (2026-07-31): the device-local roster/lines
+// (crewLogStatus — instant, offline-safe, carries selfies) and the crew-day
+// edge function (server truth: crew who log on their OWN phones sync there,
+// never to this device — and the live day-clock state only exists there).
+// Offline, the screen is exactly the old local-only view.
+import { useEffect, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { call } from "../api";
 import { Card, EmptyState, GroupLabel, NoticeCard } from "../components/ui";
 import { TRADES } from "../schema";
-import { crewLogStatus } from "../store";
+import { activeProfile, crewLogStatus, currentProject, gcAccount } from "../store";
+import { timeStr } from "../util";
 import { colors, fonts } from "../theme";
 
 function Avatar({ name, selfie, tone }) {
@@ -33,7 +41,50 @@ function CrewRow({ row, lang, right, rightTone }) {
 }
 
 export default function CrewScreen({ t, lang, workDate }) {
-  const { logged, missing, total, loggedCount } = crewLogStatus(workDate);
+  const me = activeProfile();
+  const [remote, setRemote] = useState(null);
+
+  useEffect(() => {
+    const gcCode = gcAccount()?.gc_code || me?.gc_code;
+    const pid = currentProject()?.id;
+    if (!gcCode || !pid) return;
+    let alive = true;
+    call("crew-day", { gc_code: gcCode, project_id: pid, work_date: workDate })
+      .then((r) => {
+        if (alive && r.ok && Array.isArray(r.workers)) setRemote(r.workers);
+      })
+      .catch(() => {}); // offline → local-only view, same as before
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workDate]);
+
+  // Merge: local rows seed the map (selfies, offline coverage); server rows
+  // override hours (superset once synced) and are the only source of the
+  // live clock state.
+  const local = crewLogStatus(workDate);
+  const byId = new Map();
+  for (const r of [...local.logged, ...local.missing]) {
+    byId.set(r.worker_id, { ...r, on_clock: false, clock_in: null });
+  }
+  for (const w of remote ?? []) {
+    if (w.worker_id === me?.worker_id) continue;
+    const cur = byId.get(w.worker_id);
+    byId.set(w.worker_id, {
+      worker_id: w.worker_id,
+      name: cur?.name ?? w.name,
+      trade: cur?.trade ?? w.trade,
+      selfie: cur?.selfie ?? null,
+      hours: w.hours > 0 ? w.hours : cur?.hours ?? 0,
+      on_clock: w.on_clock,
+      clock_in: w.clock_in,
+    });
+  }
+  const rows = [...byId.values()];
+  const onClock = rows.filter((r) => r.on_clock).sort((a, b) => (a.clock_in < b.clock_in ? -1 : 1));
+  const logged = rows.filter((r) => !r.on_clock && r.hours > 0).sort((a, b) => b.hours - a.hours);
+  const missing = rows.filter((r) => !r.on_clock && !(r.hours > 0)).sort((a, b) => a.name.localeCompare(b.name));
+  const total = rows.length;
+  const activeCount = onClock.length + logged.length;
 
   if (total === 0) {
     return (
@@ -48,10 +99,19 @@ export default function CrewScreen({ t, lang, workDate }) {
       <Card>
         <GroupLabel>{t("crewTitle")}</GroupLabel>
         <View style={s.countRow}>
-          <Text style={s.count}>{loggedCount}<Text style={s.countTotal}> / {total}</Text></Text>
+          <Text style={s.count}>{activeCount}<Text style={s.countTotal}> / {total}</Text></Text>
           <Text style={s.countLabel}>{t("loggedToday")}</Text>
         </View>
       </Card>
+
+      {onClock.length > 0 && (
+        <Card>
+          <GroupLabel>⏱ {t("onTheClock")}</GroupLabel>
+          {onClock.map((r) => (
+            <CrewRow key={r.worker_id} row={r} lang={lang} right={`${t("sinceAt")} ${timeStr(r.clock_in, lang)}`} rightTone={colors.green} />
+          ))}
+        </Card>
+      )}
 
       {missing.length > 0 ? (
         <Card>
