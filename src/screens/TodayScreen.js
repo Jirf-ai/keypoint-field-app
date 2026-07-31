@@ -2,7 +2,7 @@
 // a capture tile row (§2.2), then the day reads as a ledger (§2.5). Role decides
 // the surface: crew log hours + photos; site managers add materials, review,
 // submit, and raise change orders.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { parseProject } from "../components/ProjectPicker";
 import { isSyncing } from "../sync";
@@ -53,6 +53,8 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
   const photos = photosFor(workDate);
   const totals = visibleTotals(workDate);
   const status = dayStatus(workDate);
+  // Photo inbox: open while the day is live, folded once submitted.
+  const [inboxOpen, setInboxOpen] = useState(status === "draft");
   const me = activeProfile();
   const isSM = me?.role === "site_manager";
   const myName = me?.display_name;
@@ -160,19 +162,35 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
         </Card>
       )}
 
+      {/* Photo inbox — collapsible so it stops dominating the screen
+          (Jeffrey 2026-07-30). Expanded while the day is a draft (labeling is
+          live work); once submitted it folds to a one-line summary that
+          expands on tap. */}
       {inbox.length > 0 && (
         <Card style={{ marginTop: 14 }}>
-          <GroupLabel>📷 {inbox.length} {t("needDetails")}</GroupLabel>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={s.inboxRow}>
-              {inbox.map((p) => (
-                <Pressable key={p.photo_id} onPress={() => onFillPhoto(p)} accessibilityRole="button" accessibilityLabel={t("needDetails")}>
-                  <Image source={{ uri: p.uri }} style={s.inboxThumb} resizeMode="cover" />
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
-          <Muted style={{ marginTop: 8 }}>{t("needDetailsHint")}</Muted>
+          <Pressable
+            onPress={() => setInboxOpen((v) => !v)}
+            style={s.inboxHead}
+            accessibilityRole="button"
+            accessibilityLabel={t("needDetails")}
+          >
+            <GroupLabel>📷 {inbox.length} {t("needDetails")}</GroupLabel>
+            <Text style={s.inboxChevron}>{inboxOpen ? "▾" : "▸"}</Text>
+          </Pressable>
+          {inboxOpen && (
+            <>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+                <View style={s.inboxRow}>
+                  {inbox.map((p) => (
+                    <Pressable key={p.photo_id} onPress={() => onFillPhoto(p)} accessibilityRole="button" accessibilityLabel={t("needDetails")}>
+                      <Image source={{ uri: p.uri }} style={s.inboxThumb} resizeMode="cover" />
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
+              <Muted style={{ marginTop: 8 }}>{t("needDetailsHint")}</Muted>
+            </>
+          )}
         </Card>
       )}
 
@@ -340,6 +358,8 @@ const s = StyleSheet.create({
   guideRow: { flexDirection: "row", gap: 10, marginTop: 4, alignItems: "flex-start" },
   guideNum: { fontFamily: fonts.mono, color: colors.accent, fontSize: 12, fontWeight: "700", width: 22, lineHeight: 22 },
   guideText: { fontFamily: fonts.body, color: colors.text, fontSize: 14, fontWeight: "600", lineHeight: 22, flex: 1 },
+  inboxHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  inboxChevron: { color: colors.accent, fontSize: 14, fontWeight: "800" },
   inboxRow: { flexDirection: "row", gap: 8 },
   inboxThumb: { width: 72, height: 72, borderRadius: 10, backgroundColor: colors.surfaceSunken, borderWidth: 2, borderColor: colors.accent },
   submittedBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#15803d14", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12 },
