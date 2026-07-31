@@ -1,30 +1,61 @@
 // Projects drawer (Option A) — a compact left slide-in that lists all the
-// worker's projects for one-tap switching. Opened by tapping the header avatar.
-// Site managers add projects from here; crew join a manager's list.
+// worker's projects for one-tap switching, PLUS the Records search that is
+// every worker's way to find a project (restored 2026-07-30: the picker
+// consolidation dropped it, which left crew on their own phones with no path
+// to a project at all — the KP share-code UI it left behind was device-local
+// and confusing, so search replaces it entirely per Jeffrey).
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Animated, Easing, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { searchProjects } from "../api";
 import { parseProject } from "./ProjectPicker";
 import { colors, fonts, radius, type } from "../theme";
-import { copyToClipboard } from "../util";
 
 const ROLE_PILL = {
   site_manager: { label: "site mgr", color: "#d95a1f", bg: "#d95a1f1c" },
   journeyman: { label: "crew", color: "#15803d", bg: "#15803d18" },
 };
 
-export default function ProjectsDrawer({ open, onClose, t, profile, role, current, projects, shareCode, onPick, onAdd, onJoin }) {
+export default function ProjectsDrawer({ open, onClose, t, profile, role, current, projects, onPick, onAdd }) {
   const { width } = useWindowDimensions();
   const W = Math.min(300, Math.round(Math.min(width || 380, 520) * 0.86));
   // Render only while open/animating; JS-driven animation (RN-web ignores the
   // native driver, and native-driver transforms wouldn't reliably hide it).
   const [mounted, setMounted] = useState(open);
-  const [copied, setCopied] = useState(false);
   const x = useRef(new Animated.Value(-W)).current;
   const fade = useRef(new Animated.Value(0)).current;
+
+  // Records typeahead — the universal find-your-project path (any role, any
+  // phone). Debounced, from 3 characters, same contract as the old picker.
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [noHit, setNoHit] = useState(false);
+  const timer = useRef(null);
+  useEffect(() => {
+    clearTimeout(timer.current);
+    setNoHit(false);
+    const term = q.trim();
+    if (term.length < 3) { setResults([]); setSearching(false); return; }
+    setSearching(true);
+    timer.current = setTimeout(async () => {
+      try {
+        const r = await searchProjects(term);
+        setResults(r ?? []);
+        setNoHit(!(r ?? []).length);
+      } catch {
+        setResults([]);
+        setNoHit(true);
+      }
+      setSearching(false);
+    }, 350);
+    return () => clearTimeout(timer.current);
+  }, [q]);
 
   useEffect(() => {
     if (open) {
       setMounted(true);
+      setQ("");
+      setResults([]);
       x.setValue(-W);
       Animated.parallel([
         Animated.timing(x, { toValue: 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: false }),
@@ -45,6 +76,24 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
   const pill = ROLE_PILL[role] ?? ROLE_PILL.journeyman;
   const name = profile?.display_name ?? "";
 
+  const projectRow = (p, keyPrefix) => {
+    const m = parseProject(p);
+    const isCur = p.id === current?.id;
+    const active = (p.status ?? "active") === "active";
+    return (
+      <Pressable key={`${keyPrefix}-${p.id}`} style={[s.row, isCur && s.rowCur]} onPress={() => onPick(p)} accessibilityRole="button" accessibilityLabel={m.display}>
+        {isCur && <View style={s.rail} />}
+        <View style={[s.dot, { backgroundColor: active ? colors.green : colors.placeholder }]} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={s.rowTitle} numberOfLines={1}>{m.display}</Text>
+          <Text style={s.rowMeta} numberOfLines={1}>{m.city ? `${m.city} · ` : ""}<Text style={s.rowCode}>{m.code}</Text></Text>
+        </View>
+      </Pressable>
+    );
+  };
+
+  const showingSearch = q.trim().length >= 3;
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={open ? "auto" : "none"}>
       <Animated.View style={[StyleSheet.absoluteFill, s.scrim, { opacity: fade }]}>
@@ -52,10 +101,8 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
       </Animated.View>
 
       <Animated.View style={[s.panel, { width: W, transform: [{ translateX: x }] }]}>
-        {/* identity — avatar + name only; the code block gets the full drawer
-            width below (inside this narrow column the code wrapped mid-string
-            and everything read cramped). */}
-        <View style={[s.head, !(isSM && shareCode) && s.headBorder]}>
+        {/* identity */}
+        <View style={s.head}>
           {profile?.selfie_uri ? (
             <Image source={{ uri: profile.selfie_uri }} style={s.av} />
           ) : (
@@ -69,61 +116,51 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
           </View>
         </View>
 
-        {/* TWO codes exist — the explicit "Project-list code" label keeps them
-            straight (the TEAM code lives in Settings). Non-breaking hyphen so
-            the code never splits. */}
-        {isSM && shareCode ? (
-          <View style={s.codeBlock}>
-            <View style={s.shareRow}>
-              <Text style={s.share}>{t("projectListCode")} · <Text style={s.shareCodeText}>{shareCode.replace("-", "‑")}</Text></Text>
-              <Pressable
-                hitSlop={8}
-                style={s.copyChip}
-                accessibilityRole="button"
-                accessibilityLabel={t("copyCode")}
-                onPress={async () => {
-                  if (await copyToClipboard(shareCode)) {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1600);
-                  }
-                }}
-              >
-                <Text style={s.copyChipText}>{copied ? `✓ ${t("copiedCode")}` : `⧉ ${t("copyCode")}`}</Text>
-              </Pressable>
-            </View>
+        {/* Find your project — the one path for every worker. */}
+        <TextInput
+          style={s.search}
+          value={q}
+          onChangeText={setQ}
+          placeholder={t("projectAddressLabel")}
+          placeholderTextColor={colors.placeholder}
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel={t("projectAddressLabel")}
+        />
+
+        {showingSearch ? (
+          <>
+            <Text style={s.lbl}>
+              {searching ? t("searchingRecords") : `${results.length} ${results.length === 1 ? t("matchOne") : t("matchMany")}`}
+            </Text>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {searching && <ActivityIndicator color={colors.accent} style={{ marginTop: 14 }} />}
+              {!searching && results.map((p) => projectRow(p, "hit"))}
+              {!searching && noHit && <Text style={s.emptyText}>{t("noProjectFound")}</Text>}
+            </ScrollView>
+          </>
+        ) : (
+          <>
+            <Text style={s.lbl}>{t("projectsLabel")} · {projects.length}</Text>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {projects.length === 0 ? (
+                <Text style={s.emptyText}>{t("noProjectsYet")}</Text>
+              ) : (
+                projects.map((p) => projectRow(p, "mine"))
+              )}
+            </ScrollView>
+          </>
+        )}
+
+        {/* pinned action — site managers create projects; crew find theirs by
+            searching above, so they get no footer button. */}
+        {isSM && (
+          <View style={s.foot}>
+            <Pressable style={s.action} onPress={onAdd} accessibilityRole="button">
+              <Text style={s.actionText}>+ {t("addProject")}</Text>
+            </Pressable>
           </View>
-        ) : null}
-
-        <Text style={s.lbl}>{t("projectsLabel")} · {projects.length}</Text>
-
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
-          {projects.length === 0 ? (
-            <Text style={s.emptyText}>{isSM ? t("noProjectsYet") : t("teamProjects")}</Text>
-          ) : (
-            projects.map((p) => {
-              const m = parseProject(p);
-              const isCur = p.id === current?.id;
-              const active = (p.status ?? "active") === "active";
-              return (
-                <Pressable key={p.id} style={[s.row, isCur && s.rowCur]} onPress={() => onPick(p)} accessibilityRole="button" accessibilityLabel={m.display}>
-                  {isCur && <View style={s.rail} />}
-                  <View style={[s.dot, { backgroundColor: active ? colors.green : colors.placeholder }]} />
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={s.rowTitle} numberOfLines={1}>{m.display}</Text>
-                    <Text style={s.rowMeta} numberOfLines={1}>{m.city ? `${m.city} · ` : ""}<Text style={s.rowCode}>{m.code}</Text></Text>
-                  </View>
-                </Pressable>
-              );
-            })
-          )}
-        </ScrollView>
-
-        {/* pinned action */}
-        <View style={s.foot}>
-          <Pressable style={s.action} onPress={isSM ? onAdd : onJoin} accessibilityRole="button">
-            <Text style={s.actionText}>{isSM ? `+ ${t("addProject")}` : `${t("joinList")} ▸`}</Text>
-          </Pressable>
-        </View>
+        )}
       </Animated.View>
     </View>
   );
@@ -143,10 +180,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 0,
   },
-  head: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 13 },
-  headBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  codeBlock: { paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
-  shareCodeText: { color: colors.accent, fontWeight: "700" },
+  head: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 13, borderBottomWidth: 1, borderBottomColor: colors.border },
   av: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surfaceSunken },
   avEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.ink },
   avInit: { fontFamily: fonts.mono, color: colors.onInk, fontSize: 15, fontWeight: "700" },
@@ -154,11 +188,19 @@ const s = StyleSheet.create({
   name: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "800", color: colors.text, flexShrink: 1 },
   pill: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 7 },
   pillText: { fontFamily: fonts.mono, fontSize: 9, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase" },
-  share: { fontFamily: fonts.mono, fontSize: 11, color: colors.textMuted, flexShrink: 1 },
-  shareRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  shareHint: { fontFamily: fonts.body, fontSize: 10.5, lineHeight: 14, color: colors.textMuted, marginTop: 4 },
-  copyChip: { borderWidth: 1, borderColor: "#d95a1f55", borderRadius: 999, paddingVertical: 2, paddingHorizontal: 7, backgroundColor: "#d95a1f0d" },
-  copyChipText: { fontFamily: fonts.body, fontSize: 10, fontWeight: "700", color: colors.accent },
+
+  search: {
+    marginTop: 12,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.input,
+    backgroundColor: colors.card,
+    paddingHorizontal: 12,
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.text,
+  },
 
   lbl: { ...type.groupLabel, marginTop: 14, marginBottom: 4 },
   emptyText: { fontFamily: fonts.body, fontSize: 13, color: colors.textMuted, paddingVertical: 12 },
