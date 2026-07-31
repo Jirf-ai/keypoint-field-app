@@ -15,9 +15,10 @@ import { copyToClipboard } from "../util";
 // "2825maj", "2825 MAJ" all hit the same project).
 const codeKey = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
+// Role colors (Jeffrey 2026-07-31): site manager = teal, crew = orange.
 const ROLE_PILL = {
-  site_manager: { label: "site mgr", color: "#d95a1f", bg: "#d95a1f1c" },
-  journeyman: { label: "crew", color: "#15803d", bg: "#15803d18" },
+  site_manager: { label: "site mgr", color: "#0f766e", bg: "#0f766e1c" },
+  journeyman: { label: "crew", color: "#d95a1f", bg: "#d95a1f1c" },
 };
 
 export default function ProjectsDrawer({ open, onClose, t, profile, role, current, projects, onPick, onAdd, onRemove }) {
