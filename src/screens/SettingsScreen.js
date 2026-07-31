@@ -131,8 +131,11 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
 
         {/* GC team code — standing, locked to the registered company account
             (Jeffrey 2026-07-27). The GC copies it here and hands it to
-            workers; without it a worker cannot register. */}
-        {gc && (
+            workers; without it a worker cannot register. SITE MANAGERS ONLY
+            (Jeffrey 2026-07-31): the code is the GC's to hand out — a crew
+            profile never shows it, even when the GC session lives on this
+            same device (shared/registration phone). */}
+        {gc && me?.role === "site_manager" && (
           <Card>
             <GroupLabel>{t("gcCodeTitle")}</GroupLabel>
             <Text style={s.gcBiz}>{gc.business_name}</Text>
@@ -144,12 +147,12 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
           </Card>
         )}
 
-        {/* A worker linked to a GC sees which company signed them in. */}
-        {!gc && me?.gc_business && (
+        {/* Everyone else linked to a GC just sees which company signed them
+            in — company name only, no code (the code is the GC's to give). */}
+        {!(gc && me?.role === "site_manager") && me?.gc_business && (
           <Card>
             <GroupLabel>{t("yourCompany")}</GroupLabel>
             <Text style={s.gcBiz}>{me.gc_business}</Text>
-            <Muted>{t("teamCode")}: {me.gc_code}</Muted>
           </Card>
         )}
 
