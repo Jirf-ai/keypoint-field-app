@@ -1,27 +1,28 @@
 // Small cross-platform helpers shared across screens.
 import { Platform } from "react-native";
 
+// The one app-language → BCP-47 mapping, so every formatter drifts together.
+const localeFor = (lang) => (lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US");
+
 // The ledger date stamp — "MON 28 JUL 2026", localized. One formatter so Today
 // and Review read identically in every language (no en-US drift).
 export function dateStamp(workDate, lang) {
-  const locale = lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US";
+  const locale = localeFor(lang);
   const d = new Date(workDate + "T12:00:00");
   const wd = d.toLocaleDateString(locale, { weekday: "short" }).toUpperCase().replace(".", "");
   const mo = d.toLocaleDateString(locale, { month: "short" }).toUpperCase().replace(".", "");
   return `${wd} ${d.getDate()} ${mo} ${d.getFullYear()}`;
 }
 
-// Short localized weekday for a date string — "Mon" / "lun" / "周一".
 // Localized clock time ("6:52 AM") from an ISO stamp — shared by the day-clock
 // strip, the End Day receipt, and the submitted banner.
 export function timeStr(iso, lang) {
-  const locale = lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US";
-  return new Date(iso).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString(localeFor(lang), { hour: "numeric", minute: "2-digit" });
 }
 
+// Short localized weekday for a date string — "Mon" / "lun" / "周一".
 export function weekdayLabel(dateStr, lang) {
-  const locale = lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US";
-  return new Date(dateStr + "T12:00:00").toLocaleDateString(locale, { weekday: "short" }).replace(".", "");
+  return new Date(dateStr + "T12:00:00").toLocaleDateString(localeFor(lang), { weekday: "short" }).replace(".", "");
 }
 
 // ---- Web photo durability (zero-loss, Tech Eval §6) ----

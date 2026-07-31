@@ -5,13 +5,11 @@
 // ink-framed image, chip walls, Save/Cancel.
 import { useState } from "react";
 import { Image, Modal, ScrollView, StyleSheet, View } from "react-native";
-import { Btn, Card, ChipWall, Field, GroupLabel, Segmented, preferred } from "./ui";
+import { Btn, Card, ChipWall, Field, GroupLabel, PHASE_ORDER, Segmented } from "./ui";
 import { phaseLabel } from "../i18n";
-import { PHASES } from "../schema";
 import { currentAreas } from "../store";
 import { colors } from "../theme";
 
-const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"]);
 
 export default function PhotoViewer({ photo, t, lang, onSave, onDelete, onClose }) {
   const [caption, setCaption] = useState(photo.caption ?? "");

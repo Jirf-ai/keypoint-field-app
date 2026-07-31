@@ -13,15 +13,14 @@
 import { useState } from "react";
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { Btn, Card, ChipWall, Field, GroupLabel, Muted, preferred } from "../components/ui";
+import { Btn, Card, ChipWall, Field, GroupLabel, Muted, TRADE_ORDER } from "../components/ui";
 import { call } from "../api";
-import { REQUIRE_PHONE_VERIFICATION, TRADES } from "../schema";
+import { REQUIRE_PHONE_VERIFICATION } from "../schema";
 import { copyToClipboard } from "../util";
 import { fetchMyProjects, newWorkerId, sendOtp, verifyOtp } from "../auth";
 import { createProfile, gcAccount, joinByCode, logIn, profiles, restoreProfile, seedRestoredProjects, setGcAccount } from "../store";
 import { colors, fonts, type } from "../theme";
 
-const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
 
 // Auto-format to (626) - 555 - 0100 — strip non-digits, cap 10.
 function formatPhone(v) {

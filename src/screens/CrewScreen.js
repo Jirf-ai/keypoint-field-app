@@ -9,28 +9,19 @@
 // never to this device — and the live day-clock state only exists there).
 // Offline, the screen is exactly the old local-only view.
 import { useEffect, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { call } from "../api";
-import { Card, EmptyState, GroupLabel, NoticeCard } from "../components/ui";
+import { Avatar, Card, EmptyState, GroupLabel, NoticeCard } from "../components/ui";
 import { TRADES } from "../schema";
 import { activeProfile, crewLogStatus, currentProject, gcAccount } from "../store";
 import { timeStr } from "../util";
 import { colors, fonts } from "../theme";
 
-function Avatar({ name, selfie, tone }) {
-  if (selfie) return <Image source={{ uri: selfie }} style={s.avatar} />;
-  return (
-    <View style={[s.avatar, { backgroundColor: tone ?? colors.ink }]}>
-      <Text style={s.avatarInitial}>{(name || "?")[0].toUpperCase()}</Text>
-    </View>
-  );
-}
-
 function CrewRow({ row, lang, right, rightTone }) {
   const trade = row.trade ? TRADES.find((x) => x.code === row.trade)?.[lang] ?? row.trade : null;
   return (
     <View style={s.row}>
-      <Avatar name={row.name} selfie={row.selfie} tone={rightTone} />
+      <Avatar name={row.name} uri={row.selfie} size={34} tone={rightTone} />
       <View style={{ flex: 1 }}>
         <Text style={s.name} numberOfLines={1}>{row.name}</Text>
         {trade ? <Text style={s.trade} numberOfLines={1}>{trade}</Text> : null}
@@ -143,8 +134,6 @@ const s = StyleSheet.create({
   countLabel: { fontFamily: fonts.mono, fontSize: 10.5, fontWeight: "600", letterSpacing: 1, textTransform: "uppercase", color: colors.label },
 
   row: { flexDirection: "row", alignItems: "center", gap: 11, borderTopWidth: 1, borderTopColor: colors.border, paddingVertical: 11 },
-  avatar: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: colors.ink },
-  avatarInitial: { fontFamily: fonts.mono, color: colors.onInk, fontSize: 14, fontWeight: "700" },
   name: { fontFamily: fonts.body, fontSize: 14.5, fontWeight: "700", color: colors.text },
   trade: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, marginTop: 1 },
   right: { fontFamily: fonts.mono, fontSize: 12.5, fontWeight: "700", color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.4, fontVariant: ["tabular-nums"] },

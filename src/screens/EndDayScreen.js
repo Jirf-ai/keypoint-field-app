@@ -8,15 +8,13 @@
 // write through addLine, so V-checks and the sync spine are untouched.
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Card, EmptyState, FormScreen, GroupLabel, MathStrip, NoticeCard, NumericField, PickerRow, StickyFooter, preferred } from "../components/ui";
+import { Card, EmptyState, FormScreen, GroupLabel, MathStrip, NoticeCard, NumericField, PHASE_ORDER, PickerRow, StickyFooter, TRADE_ORDER } from "../components/ui";
 import { phaseLabel } from "../i18n";
-import { computeClockHours, PHASES, TRADES, todayStr, validateLabor } from "../schema";
+import { computeClockHours, TRADES, todayStr, validateLabor } from "../schema";
 import { activeProfile, addLine, clockEnd, currentAreas, getSettings, openClock } from "../store";
 import { timeStr } from "../util";
 import { colors, fonts, type } from "../theme";
 
-const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
-const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"]);
 
 const FIX_KEYS = { V_trade: "fixTrade", V4_unit_cost: "fixRate", V_phase: "fixPhase", V_area: "fixArea" };
 

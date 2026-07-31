@@ -8,9 +8,9 @@ import { useEffect, useRef, useState } from "react";
 import { Image, StyleSheet, Switch, Text, View } from "react-native";
 import { call } from "../api";
 import BarcodeScanner from "../components/BarcodeScanner";
-import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, MathStrip, Muted, NoticeCard, NumericField, PickerRow, StickyFooter, preferred } from "../components/ui";
+import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, MathStrip, Muted, NoticeCard, NumericField, PHASE_ORDER, PickerRow, StickyFooter, preferred } from "../components/ui";
 import { phaseLabel } from "../i18n";
-import { COST_CLASSES, PHASES, UNITS, defaultClassForPhase, validateLineItem, lineWarnings } from "../schema";
+import { COST_CLASSES, UNITS, defaultClassForPhase, validateLineItem, lineWarnings } from "../schema";
 import { activeLines, addLine, amendLine, changeOrders, currentAreas, getSettings, linkPhoto } from "../store";
 import { CLASS_COLORS, CLASS_LABELS, colors, fonts } from "../theme";
 
@@ -25,7 +25,6 @@ const FIX_KEYS = {
 };
 
 const UNIT_ORDER = preferred(UNITS, ["EA", "LF", "SF", "CY", "SHT", "BAG"]);
-const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"]);
 
 // The labelled 2×2 cost-class grid — replaces the four bare colored circles.
 function KindOfCost({ value, onChange }) {

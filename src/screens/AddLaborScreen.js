@@ -8,14 +8,12 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { fetchTeamRoster } from "../auth";
-import { Card, Field, FormScreen, GroupLabel, MathStrip, NoticeCard, NumericField, PickerRow, Segmented, StickyFooter, preferred } from "../components/ui";
+import { Card, Field, FormScreen, GroupLabel, MathStrip, NoticeCard, NumericField, PHASE_ORDER, PickerRow, Segmented, StickyFooter, TRADE_ORDER } from "../components/ui";
 import { phaseLabel } from "../i18n";
-import { HOUR_TYPES, PHASES, TRADES, validateLabor, laborWarnings } from "../schema";
+import { HOUR_TYPES, TRADES, validateLabor, laborWarnings } from "../schema";
 import { activeLines, activeProfile, addLine, amendLine, currentAreas, getSettings, setTeamRoster, teamRoster } from "../store";
 import { colors, fonts } from "../theme";
 
-const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
-const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"]);
 
 const FIX_KEYS = {
   V_trade: "fixTrade",

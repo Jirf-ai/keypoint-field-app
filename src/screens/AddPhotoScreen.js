@@ -7,15 +7,14 @@ import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native
 import * as ImagePicker from "expo-image-picker";
 import { File, Paths } from "expo-file-system";
 import { refreshLocation } from "../location";
-import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, PickerRow, Segmented, StickyFooter, preferred } from "../components/ui";
+import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, PHASE_ORDER, PickerRow, Segmented, StickyFooter } from "../components/ui";
 import { phaseLabel } from "../i18n";
-import { PHASES, photoFilename } from "../schema";
+import { photoFilename } from "../schema";
 import { parseProject } from "../components/ProjectPicker";
 import { activeLines, addPhoto, currentAreas, currentProject, getSettings, nextPhotoSeq } from "../store";
 import { durablePhotoUri } from "../util";
 import { colors, fonts, type } from "../theme";
 
-const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"]);
 
 export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
   const st = getSettings();

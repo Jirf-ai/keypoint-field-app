@@ -4,8 +4,8 @@
 // on this device also finds its standing team code here (locked to the
 // account; copy to hand to the crew — workers can't register without it).
 import { useState } from "react";
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import { Btn, Card, ChipWall, Field, GroupLabel, Muted, Segmented, StackedFooter } from "../components/ui";
+import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Avatar, Btn, Card, ChipWall, Field, GroupLabel, Muted, Segmented, StackedFooter } from "../components/ui";
 import { parseProject } from "../components/ProjectPicker";
 import { copyToClipboard } from "../util";
 import { syncReminders } from "../notifications";
@@ -135,11 +135,7 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
             <Field label={t("nameLabel")} value={name} onChangeText={changeName} placeholder="—" />
           ) : (
             <View style={s.idRow}>
-              {me?.selfie_uri ? (
-                <Image source={{ uri: me.selfie_uri }} style={s.avatar} />
-              ) : (
-                <View style={[s.avatar, s.avatarEmpty]}><Text style={s.avatarInitial}>{(name || "?")[0]}</Text></View>
-              )}
+              <Avatar name={name} uri={me?.selfie_uri} size={46} />
               <View style={{ flex: 1 }}>
                 <Text style={s.idLabel}>{t("nameLabel").toUpperCase()}</Text>
                 <Text style={s.idName}>{name || "—"}</Text>
@@ -290,9 +286,6 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
 
 const s = StyleSheet.create({
   idRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.surfaceSunken },
-  avatarEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.ink },
-  avatarInitial: { fontFamily: fonts.mono, color: colors.onInk, fontSize: 18, fontWeight: "700" },
   idLabel: { fontFamily: fonts.mono, fontSize: 9.5, fontWeight: "600", letterSpacing: 1.33, textTransform: "uppercase", color: colors.label },
   idName: { fontFamily: fonts.body, fontSize: 17, fontWeight: "700", color: colors.text, marginTop: 2 },
   edit: { fontFamily: fonts.body, fontSize: 14, fontWeight: "700", color: colors.accent },

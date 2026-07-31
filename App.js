@@ -2,11 +2,12 @@
 // Hand-rolled navigation (same pattern as the DD app): a screen stack in
 // state, no navigation library. The first screen is capture, always.
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Image, Platform, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Platform, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import FadeTransition from "./src/components/FadeTransition";
 import LaunchSplash, { LogoRow } from "./src/components/LaunchSplash";
 import ProjectsDrawer from "./src/components/ProjectsDrawer";
+import { Avatar } from "./src/components/ui";
 import WelcomeBack from "./src/components/WelcomeBack";
 import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
@@ -34,26 +35,6 @@ import { colors, ensureFontsWeb, fonts, type } from "./src/theme";
 SplashScreen.preventAutoHideAsync().catch(() => {});
 // Keypoint type system — inject Google Fonts on web (native uses expo-font).
 ensureFontsWeb();
-
-// Worker avatar with a dead-image fallback: old profiles may hold a blob: URI
-// that didn't survive a reload — show their initial rather than a gray dot.
-function ProfileAvatar({ profile }) {
-  const [broken, setBroken] = useState(false);
-  if (!profile?.selfie_uri || broken) {
-    return (
-      <View style={[s.avatar, s.avatarEmpty]}>
-        <Text style={s.avatarInitial}>{profile?.display_name?.[0] ?? "?"}</Text>
-      </View>
-    );
-  }
-  return (
-    <Image
-      source={{ uri: profile.selfie_uri }}
-      style={s.avatar}
-      onError={() => setBroken(true)}
-    />
-  );
-}
 
 // Floating pill that makes an APP-VERSION update visible in real time
 // (Jeffrey 2026-07-30: the download was invisible — crews had no way to know
@@ -333,7 +314,7 @@ export default function App() {
               <View style={s.headerLeft}>
                 {authed && (
                   <Pressable onPress={() => setDrawerOpen(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("projectsLabel")}>
-                    <ProfileAvatar profile={profile} />
+                    <Avatar name={profile?.display_name} uri={profile?.selfie_uri} size={30} />
                   </Pressable>
                 )}
                 <View ref={logoSlotRef} collapsable={false} style={{ opacity: splashDone ? 1 : 0, flexShrink: 1 }}>
@@ -499,9 +480,6 @@ const s = StyleSheet.create({
   updatePillDiamond: { color: colors.accent, fontSize: 13, lineHeight: 15 },
   updatePillText: { fontFamily: fonts.body, fontSize: 12.5, fontWeight: "700", color: colors.accent },
   mark: { color: colors.accent, fontSize: 20 },
-  avatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.surfaceSunken },
-  avatarEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.ink },
-  avatarInitial: { fontFamily: fonts.mono, color: colors.onInk, fontSize: 12, fontWeight: "700" },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 9, flexShrink: 1, minWidth: 0 },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 0 },
   langWrap: {

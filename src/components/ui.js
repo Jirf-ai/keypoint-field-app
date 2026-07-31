@@ -3,8 +3,9 @@
 // Orange marks only the one action / the unresolved / structural wayfinding;
 // everything else that used to be cobalt is ink.
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View, ScrollView } from "react-native";
+import { Image, Pressable, StyleSheet, Text, TextInput, View, ScrollView } from "react-native";
 import { tr } from "../i18n";
+import { PHASES, TRADES } from "../schema";
 import { CLASS_COLORS, colors, fonts, radius, touch, type } from "../theme";
 
 const keyOf = (o) => (typeof o === "string" ? o : o.code);
@@ -15,6 +16,30 @@ export function preferred(options, firstKeys) {
   const firsts = firstKeys.map((fk) => options.find((o) => keyOf(o) === fk)).filter(Boolean);
   const rest = options.filter((o) => !firstKeys.includes(keyOf(o)));
   return [...firsts, ...rest];
+}
+
+// The "most likely first" picker orders — one copy, so every form (labor,
+// item, photo, auth, end-day, viewer) agrees on what leads.
+export const TRADE_ORDER = preferred(TRADES, ["laborer", "carpenter", "concrete", "framer", "electrician"]);
+export const PHASE_ORDER = preferred(PHASES, ["framing", "roofing", "drywall", "gazebo"]);
+
+// ------------------------------------------------------------------ avatar
+// Worker avatar with a dead-image fallback: old profiles may hold a blob: URI
+// that didn't survive a reload — show their initial rather than a gray dot.
+// One component for the header, crew list, and settings (sizes differ only).
+export function Avatar({ name, uri, size = 34, tone }) {
+  const [broken, setBroken] = useState(false);
+  const box = { width: size, height: size, borderRadius: size / 2 };
+  if (!uri || broken) {
+    return (
+      <View style={[s.avatarBox, box, { backgroundColor: tone ?? colors.ink }]}>
+        <Text style={[s.avatarInitial, { fontSize: Math.round(size * 0.4) }]}>
+          {(name || "?")[0].toUpperCase()}
+        </Text>
+      </View>
+    );
+  }
+  return <Image source={{ uri }} style={[s.avatarImg, box]} onError={() => setBroken(true)} />;
 }
 
 // ------------------------------------------------------------------ money
@@ -405,6 +430,9 @@ export function EmptyState({ title, body, dashed, style }) {
 }
 
 const s = StyleSheet.create({
+  avatarBox: { alignItems: "center", justifyContent: "center" },
+  avatarImg: { backgroundColor: colors.surfaceSunken },
+  avatarInitial: { fontFamily: fonts.mono, color: colors.onInk, fontWeight: "700" },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.card,
