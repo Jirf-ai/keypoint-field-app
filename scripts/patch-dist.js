@@ -67,6 +67,30 @@ if (!html.includes("data-kf-overscroll")) {
     </style></head>`);
 }
 
+// Web app manifest — what makes ANDROID Chrome offer a real "Install app"
+// (standalone window, no URL bar). iOS ignores it and keeps using the
+// apple-* meta below; both paths share the same icons.
+const iconSizes = [192, 512];
+for (const sz of iconSizes) {
+  fs.copyFileSync(path.join(__dirname, "..", "assets", `icon-${sz}.png`), path.join(dist, `icon-${sz}.png`));
+}
+fs.writeFileSync(path.join(dist, "manifest.webmanifest"), JSON.stringify({
+  name: "Keypoint Field",
+  short_name: "Field",
+  start_url: "./",
+  scope: "./",
+  display: "standalone",
+  background_color: "#faf6ee",
+  theme_color: "#faf6ee",
+  icons: [
+    ...iconSizes.map((sz) => ({ src: `./icon-${sz}.png`, sizes: `${sz}x${sz}`, type: "image/png" })),
+    { src: "./icon.png", sizes: "1024x1024", type: "image/png" },
+  ],
+}, null, 2));
+if (!html.includes('rel="manifest"')) {
+  html = html.replace("</head>", `  <link rel="manifest" href="./manifest.webmanifest" />\n</head>`);
+}
+
 // PWA meta + service-worker registration, once.
 if (!html.includes("apple-mobile-web-app-capable")) {
   html = html.replace("</head>", `  <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -94,6 +118,9 @@ const SHELL = [
   "./index.html",
 ${bundles.map((b) => `  "./_expo/static/js/web/${b}",`).join("\n")}
 ${fontFiles.length ? `  "./fonts.css",\n${fontFiles.map((f) => `  "./webfonts/${f}",`).join("\n")}\n` : ""}  "./icon.png",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./manifest.webmanifest",
   "./favicon.ico",
 ];
 
