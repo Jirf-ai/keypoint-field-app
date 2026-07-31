@@ -2,7 +2,7 @@
 // Hand-rolled navigation (same pattern as the DD app): a screen stack in
 // state, no navigation library. The first screen is capture, always.
 import { useEffect, useRef, useState } from "react";
-import { Image, Platform, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Image, Platform, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import FadeTransition from "./src/components/FadeTransition";
 import LaunchSplash, { LogoRow } from "./src/components/LaunchSplash";
@@ -50,6 +50,42 @@ function ProfileAvatar({ profile }) {
       style={s.avatar}
       onError={() => setBroken(true)}
     />
+  );
+}
+
+// Floating pill that makes an APP-VERSION update visible in real time
+// (Jeffrey 2026-07-30: the download was invisible — crews had no way to know
+// whether to wait). Spinning brand diamond + "loading…" while the new build
+// downloads; flips to a tappable "update ready" that reloads into it.
+function AppUpdatePill({ state, t }) {
+  const rot = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (state !== "downloading") return;
+    const loop = Animated.loop(
+      Animated.timing(rot, { toValue: 1, duration: 1100, easing: Easing.linear, useNativeDriver: false }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [state, rot]);
+  if (!state) return null;
+  if (state === "downloading") {
+    const rotate = rot.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+    return (
+      <View style={s.updatePill} pointerEvents="none">
+        <Animated.Text style={[s.updatePillDiamond, { transform: [{ rotate }] }]}>◆</Animated.Text>
+        <Text style={s.updatePillText}>{t("appLoading")}</Text>
+      </View>
+    );
+  }
+  return (
+    <Pressable
+      style={[s.updatePill, s.updatePillReady]}
+      onPress={() => { try { window.location.reload(); } catch { /* native never gets here */ } }}
+      accessibilityRole="button"
+      accessibilityLabel={t("appUpdateReady")}
+    >
+      <Text style={[s.updatePillText, { color: "#15803d" }]}>✓ {t("appUpdateReady")}</Text>
+    </Pressable>
   );
 }
 
@@ -150,6 +186,35 @@ export default function App() {
   // pending badge counts down in real time and the "updating" spinner shows
   // while a sync is running (instead of the badge sitting stale until done).
   useEffect(() => onSyncActivity(() => setTick((x) => x + 1)), []);
+
+  // Web: watch the service worker so an APP-VERSION download is visible in
+  // real time (AppUpdatePill). Also nudge an update check on launch.
+  const [appUpdate, setAppUpdate] = useState(null); // null | "downloading" | "ready"
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    let cancelled = false;
+    const watch = (w) => {
+      if (!w || cancelled) return;
+      // No controller = very first install on a fresh page: the page IS the
+      // new build already, nothing to announce.
+      if (navigator.serviceWorker.controller) setAppUpdate("downloading");
+      w.addEventListener("statechange", () => {
+        if (cancelled) return;
+        if (w.state === "installed" || w.state === "activated") {
+          setAppUpdate(navigator.serviceWorker.controller ? "ready" : null);
+        } else if (w.state === "redundant") {
+          setAppUpdate(null);
+        }
+      });
+    };
+    navigator.serviceWorker.getRegistration().then((reg) => {
+      if (!reg || cancelled) return;
+      if (reg.installing) watch(reg.installing);
+      reg.addEventListener("updatefound", () => watch(reg.installing));
+      reg.update().catch(() => {});
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (dock || splashDone) return;
@@ -324,6 +389,7 @@ export default function App() {
             onJoin={() => { setDrawerOpen(false); setScreen("joinlist"); }}
           />
         )}
+        <AppUpdatePill state={appUpdate} t={t} />
       </View>
       {!splashDone && <LaunchSplash dock={dock} onDone={() => setSplashDone(true)} />}
     </SafeAreaView>
@@ -349,6 +415,29 @@ const s = StyleSheet.create({
     paddingBottom: 10,
   },
   headerRule: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  updatePill: {
+    position: "absolute",
+    top: Platform.OS === "android" ? 84 : 58,
+    alignSelf: "center",
+    zIndex: 900,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: "#d95a1f55",
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  updatePillReady: { borderColor: "#15803d55", backgroundColor: "#f2f8f4" },
+  updatePillDiamond: { color: colors.accent, fontSize: 13, lineHeight: 15 },
+  updatePillText: { fontFamily: fonts.body, fontSize: 12.5, fontWeight: "700", color: colors.accent },
   mark: { color: colors.accent, fontSize: 20 },
   avatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.surfaceSunken },
   avatarEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.ink },
