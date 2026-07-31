@@ -153,6 +153,25 @@ Deno.serve(async (req) => {
   for (const r of photos) {
     const id = str(r.photo_id);
     if (!id) { failed.push({ kind: "photo", id: "?", error: "photo_id missing" }); continue; }
+    // Tombstone (v5, additive): the worker deleted a mistake shot. The pixels
+    // go — storage object removed, row keeps its stamps with deleted_at set
+    // (append-only audit trail, but the photo leaves every surface). A photo
+    // that never synced has no row here; ack it so the client stops sending.
+    if (r.deleted) {
+      const { data: ex } = await supabase.from("field_photos")
+        .select("storage_path").eq("photo_id", id).maybeSingle();
+      if (ex) {
+        if (ex.storage_path) {
+          await supabase.storage.from("field-photos").remove([ex.storage_path]).catch(() => {});
+        }
+        const { error } = await supabase.from("field_photos")
+          .update({ deleted_at: now, storage_path: null, line_id: null, incident_id: null })
+          .eq("photo_id", id);
+        if (error) { failed.push({ kind: "photo", id, error: error.message }); continue; }
+      }
+      synced.photos.push(id);
+      continue;
+    }
     let storage_path: string | null = null;
     let uploaded_at: string | null = null;
     let file_size_bytes: number | null = null;
@@ -179,8 +198,10 @@ Deno.serve(async (req) => {
       photo_id: id,
       log_id: logIds.get(str(r.work_date)) ?? null,
       project_id,
+      // photo_kind (v6, additive): 'work' | 'receipt' — the crew's one-tap
+      // separation of jobsite evidence from the paper trail.
       ...pick(r, ["work_date", "line_id", "incident_id", "filename", "captured_at", "gps_lat",
-        "gps_lng", "phase", "area", "caption", "recorded_by"]),
+        "gps_lng", "phase", "area", "caption", "photo_kind", "recorded_by"]),
     };
     if (storage_path) {
       row.storage_path = storage_path;
