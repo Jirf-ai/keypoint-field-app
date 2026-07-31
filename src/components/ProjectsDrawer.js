@@ -65,23 +65,30 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
               <View style={[s.pill, { backgroundColor: pill.bg }]}><Text style={[s.pillText, { color: pill.color }]}>{pill.label}</Text></View>
             </View>
             {isSM && shareCode ? (
-              <View style={s.shareRow}>
-                <Text style={s.share}>{t("shareCodeInline")} · {shareCode}</Text>
-                <Pressable
-                  hitSlop={8}
-                  style={s.copyChip}
-                  accessibilityRole="button"
-                  accessibilityLabel={t("copyCode")}
-                  onPress={async () => {
-                    if (await copyToClipboard(shareCode)) {
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1600);
-                    }
-                  }}
-                >
-                  <Text style={s.copyChipText}>{copied ? `✓ ${t("copiedCode")}` : `⧉ ${t("copyCode")}`}</Text>
-                </Pressable>
-              </View>
+              <>
+                <View style={s.shareRow}>
+                  <Text style={s.share}>{t("projectListCode")} · {shareCode}</Text>
+                  <Pressable
+                    hitSlop={8}
+                    style={s.copyChip}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("copyCode")}
+                    onPress={async () => {
+                      if (await copyToClipboard(shareCode)) {
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 1600);
+                      }
+                    }}
+                  >
+                    <Text style={s.copyChipText}>{copied ? `✓ ${t("copiedCode")}` : `⧉ ${t("copyCode")}`}</Text>
+                  </Pressable>
+                </View>
+                {/* TWO codes exist and GCs must never mix them up (Jeffrey
+                    2026-07-30): this one shares the PROJECT LIST with crew who
+                    already have accounts; the company TEAM code (Settings) is
+                    what NEW crew register with. */}
+                <Text style={s.shareHint}>{t("projectListCodeHint")}</Text>
+              </>
             ) : null}
           </View>
         </View>
@@ -131,7 +138,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.bg,
     borderRightWidth: 1,
     borderRightColor: colors.border,
-    paddingTop: Platform.OS === "android" ? 40 : 16,
+    paddingTop: Platform.OS === "android" ? 40 : Platform.OS === "web" ? "max(16px, env(safe-area-inset-top))" : 16,
     paddingHorizontal: 14,
     paddingBottom: 0,
   },
@@ -145,6 +152,7 @@ const s = StyleSheet.create({
   pillText: { fontFamily: fonts.mono, fontSize: 9, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase" },
   share: { fontFamily: fonts.mono, fontSize: 10, color: colors.textMuted },
   shareRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 },
+  shareHint: { fontFamily: fonts.body, fontSize: 10.5, lineHeight: 14, color: colors.textMuted, marginTop: 4 },
   copyChip: { borderWidth: 1, borderColor: "#d95a1f55", borderRadius: 999, paddingVertical: 2, paddingHorizontal: 7, backgroundColor: "#d95a1f0d" },
   copyChipText: { fontFamily: fonts.body, fontSize: 10, fontWeight: "700", color: colors.accent },
 

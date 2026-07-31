@@ -27,6 +27,13 @@ const hash = bundles
 html = html.replace('href="/favicon.ico"', 'href="./favicon.ico"');
 html = html.replace('src="/_expo/', 'src="./_expo/');
 
+// Full-bleed on notched/home-indicator phones: viewport-fit=cover makes the
+// page own the whole screen and turns on env(safe-area-inset-*), which the
+// app's styles use so buttons never sit under the home indicator (idempotent).
+if (!html.includes("viewport-fit=cover")) {
+  html = html.replace("shrink-to-fit=no", "shrink-to-fit=no, viewport-fit=cover");
+}
+
 // Self-hosted fonts (scripts/fetch-fonts.js): copy into dist and link the
 // stylesheet. Same-origin means the service worker can cache them — the
 // offline relaunch keeps the brand fonts (2026-07-30 gauntlet fix).

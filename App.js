@@ -441,21 +441,28 @@ export default function App() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+  // Web full-bleed (viewport-fit=cover): pad by the device safe areas so
+  // nothing renders under the notch or the home indicator — any phone size,
+  // iOS or Android (env() is 0 where there are no insets).
+  root: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    ...(Platform.OS === "web" ? { paddingBottom: "env(safe-area-inset-bottom)" } : {}),
+  },
   // Phone-first: cap content width when running on web/desktop (DD app pattern).
   shell: {
     flex: 1,
     width: "100%",
     maxWidth: 520,
     alignSelf: "center",
-    ...(Platform.OS === "web" ? { minHeight: "100vh" } : {}),
+    ...(Platform.OS === "web" ? { minHeight: "100dvh" } : {}),
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === "android" ? 40 : 14,
+    paddingTop: Platform.OS === "android" ? 40 : Platform.OS === "web" ? "max(14px, env(safe-area-inset-top))" : 14,
     paddingBottom: 10,
   },
   headerRule: { borderBottomWidth: 1, borderBottomColor: colors.border },
