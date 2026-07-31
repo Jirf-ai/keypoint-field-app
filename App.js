@@ -155,6 +155,30 @@ export default function App() {
     return () => clearInterval(iv);
   }, [workDate]);
 
+  // …and the moment the app comes back from the background (timers FREEZE
+  // while a phone app is suspended — an overnight sleep would otherwise show
+  // yesterday's Today for up to a minute). On every return to the foreground:
+  // recheck the date immediately and opportunistically drain the sync queue.
+  useEffect(() => {
+    const wake = () => {
+      if (todayStr() !== workDate) setTick((x) => x + 1);
+      syncNow(); // single-flight; no-op when nothing is pending
+    };
+    if (Platform.OS === "web") {
+      if (typeof document === "undefined") return;
+      const onVis = () => { if (document.visibilityState === "visible") wake(); };
+      document.addEventListener("visibilitychange", onVis);
+      window.addEventListener("focus", wake);
+      return () => {
+        document.removeEventListener("visibilitychange", onVis);
+        window.removeEventListener("focus", wake);
+      };
+    }
+    const { AppState } = require("react-native");
+    const sub = AppState.addEventListener?.("change", (st) => { if (st === "active") wake(); });
+    return () => sub?.remove?.();
+  }, [workDate]);
+
   // Worker identity: no profile, no capture — first run shows log-in/create.
   const [profile, setProfile] = useState(null);
 
