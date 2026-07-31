@@ -221,11 +221,20 @@ export function myProjects() {
 // idempotent; the new project is selected immediately. Custom areas (optional)
 // give this project its own constrained tag list; empty falls back to the
 // generic residential set (schema §4.1 — areas are project-configured).
-export async function addOwnedProject({ name, address, status, areas }) {
+export async function addOwnedProject({ id, name, address, status, areas }) {
   const me = activeProfile();
   const cleanAreas = (areas ?? []).map((a) => a.trim()).filter(Boolean);
+  // Projects are CONFIRMED against Records, never invented on-device (Jeffrey
+  // 2026-07-30): `id` is the Records uuid, so every captured line reconciles
+  // server-side. Re-confirming an already-listed project just updates it.
+  const existing = id ? (state.owned_projects ?? []).find((x) => x.id === id) : null;
+  if (existing) {
+    if (cleanAreas.length) existing.areas = cleanAreas;
+    await setCurrentProject(existing); // persists
+    return existing;
+  }
   const p = {
-    id: uuid(),
+    id: id ?? uuid(),
     name: (name || "").trim(),
     address: (address || "").trim() || null,
     status: status || "active",
