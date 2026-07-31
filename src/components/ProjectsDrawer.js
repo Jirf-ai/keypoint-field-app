@@ -9,6 +9,11 @@ import { ActivityIndicator, Animated, Easing, Image, Platform, Pressable, Scroll
 import { searchProjects } from "../api";
 import { parseProject } from "./ProjectPicker";
 import { colors, fonts, radius, type } from "../theme";
+import { copyToClipboard } from "../util";
+
+// Punctuation-blind key for matching pasted project codes ("2825-MAJ",
+// "2825maj", "2825 MAJ" all hit the same project).
+const codeKey = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 const ROLE_PILL = {
   site_manager: { label: "site mgr", color: "#d95a1f", bg: "#d95a1f1c" },
@@ -25,11 +30,15 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
   const fade = useRef(new Animated.Value(0)).current;
 
   // Records typeahead — the universal find-your-project path (any role, any
-  // phone). Debounced, from 3 characters, same contract as the old picker.
+  // phone). Debounced, from 3 characters. The SAME box also takes a pasted
+  // PROJECT CODE ("2825-MAJ", per-project, shown on every row/plate — Jeffrey
+  // 2026-07-30): a code-shaped query searches by its street number and floats
+  // the exact code match to the top.
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [noHit, setNoHit] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
   const timer = useRef(null);
   useEffect(() => {
     clearTimeout(timer.current);
@@ -38,10 +47,19 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
     if (term.length < 3) { setResults([]); setSearching(false); return; }
     setSearching(true);
     timer.current = setTimeout(async () => {
+      const bare = codeKey(term);
+      const asCode = bare.match(/^(\d{1,6})([A-Z]{2,4})$/);
       try {
-        const r = await searchProjects(term);
-        setResults(r ?? []);
-        setNoHit(!(r ?? []).length);
+        const r = (await searchProjects(asCode ? asCode[1] : term)) ?? [];
+        if (asCode) {
+          r.sort(
+            (a, b) =>
+              (codeKey(parseProject(b).code) === bare ? 1 : 0) -
+              (codeKey(parseProject(a).code) === bare ? 1 : 0),
+          );
+        }
+        setResults(r);
+        setNoHit(!r.length);
       } catch {
         setResults([]);
         setNoHit(true);
@@ -88,6 +106,24 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
           <Text style={s.rowTitle} numberOfLines={1}>{m.display}</Text>
           <Text style={s.rowMeta} numberOfLines={1}>{m.city ? `${m.city} · ` : ""}<Text style={s.rowCode}>{m.code}</Text></Text>
         </View>
+        {/* SM: one tap copies this project's code to text to the crew — they
+            paste it into this same search box and the project pops up first. */}
+        {isSM && (
+          <Pressable
+            hitSlop={10}
+            style={s.rowCopy}
+            accessibilityRole="button"
+            accessibilityLabel={t("copyCode")}
+            onPress={async () => {
+              if (await copyToClipboard(m.code)) {
+                setCopiedId(p.id);
+                setTimeout(() => setCopiedId(null), 1400);
+              }
+            }}
+          >
+            <Text style={s.rowCopyText}>{copiedId === p.id ? "✓" : "⧉"}</Text>
+          </Pressable>
+        )}
       </Pressable>
     );
   };
@@ -121,7 +157,7 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
           style={s.search}
           value={q}
           onChangeText={setQ}
-          placeholder={t("projectAddressLabel")}
+          placeholder={t("projectSearchPlaceholder")}
           placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoCorrect={false}
@@ -212,6 +248,8 @@ const s = StyleSheet.create({
   rowTitle: { fontFamily: fonts.body, fontSize: 13.5, fontWeight: "700", color: colors.text },
   rowMeta: { fontFamily: fonts.body, fontSize: 11, color: colors.textMuted, marginTop: 1 },
   rowCode: { fontFamily: fonts.mono, fontSize: 10.5, color: colors.accent, fontWeight: "700", letterSpacing: 0.3 },
+  rowCopy: { borderWidth: 1, borderColor: "#d95a1f44", borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: "#d95a1f0d" },
+  rowCopyText: { color: colors.accent, fontSize: 12, fontWeight: "800" },
 
   foot: { paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border },
   action: {
