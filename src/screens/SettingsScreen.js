@@ -9,9 +9,12 @@ import { Btn, Card, ChipWall, Field, GroupLabel, Muted, StackedFooter } from "..
 import { parseProject } from "../components/ProjectPicker";
 import { copyToClipboard } from "../util";
 import { syncReminders } from "../notifications";
+import { call } from "../api";
+import { todayStr } from "../schema";
 import { activeProfile, currentProject, gcAccount, getSettings, myProjects, saveSettings } from "../store";
 
 const REMINDER_TIMES = ["15:00", "16:00", "17:00", "18:00", "19:00"];
+const START_TIMES = ["05:30", "06:00", "06:30", "07:00", "07:30"];
 import { colors, fonts, type } from "../theme";
 
 export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
@@ -28,6 +31,9 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
   const [remind, setRemind] = useState(!!st.remindEndOfDay);
   const [remindTime, setRemindTime] = useState(st.reminderTime || "17:00");
   const [remindDenied, setRemindDenied] = useState(false);
+  const [remindStart, setRemindStart] = useState(!!st.remindStartOfDay);
+  const [startTime, setStartTime] = useState(st.startReminderTime || "06:30");
+  const [payroll, setPayroll] = useState({ busy: false, msg: null });
   const gc = gcAccount();
   // The read-only record shows the REAL project the worker is on (from the
   // store) and their REAL company — never a hardcoded sample. Hidden until a
@@ -66,10 +72,51 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
     syncReminders();
   }
 
+  async function toggleStartReminder(v) {
+    setRemindStart(v);
+    await saveSettings({ remindStartOfDay: v });
+    syncReminders();
+  }
+
+  async function pickStartTime(x) {
+    setStartTime(x);
+    await saveSettings({ startReminderTime: x });
+    syncReminders();
+  }
+
   async function copyCode(code) {
     if (await copyToClipboard(code)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
+    }
+  }
+
+  // Weekly payroll CSV off the labor spine (payroll-export). Web downloads the
+  // file; native copies it for pasting into a spreadsheet or message.
+  async function exportPayroll() {
+    if (payroll.busy) return;
+    setPayroll({ busy: true, msg: null });
+    try {
+      const gcCode = gc?.gc_code || me?.gc_code;
+      const res = await call("payroll-export", { gc_code: gcCode, week_of: todayStr() });
+      if (!res.ok || !res.csv) {
+        setPayroll({ busy: false, msg: t(res.workers ? "payrollNone" : "payrollFailed") });
+        return;
+      }
+      if (Platform.OS === "web") {
+        const url = URL.createObjectURL(new Blob([res.csv], { type: "text/csv" }));
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `payroll-${res.week_start}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setPayroll({ busy: false, msg: t("payrollDownloaded") });
+      } else {
+        await copyToClipboard(res.csv);
+        setPayroll({ busy: false, msg: t("payrollCopied") });
+      }
+    } catch {
+      setPayroll({ busy: false, msg: t("payrollFailed") });
     }
   }
 
@@ -125,6 +172,20 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
                 </View>
               )}
               {remindDenied && <Muted style={{ marginTop: 8, color: colors.amber }}>{t("remindDenied")}</Muted>}
+
+              <View style={s.prefDivider} />
+              <View style={s.prefRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.prefLabel}>{t("remindStart")}</Text>
+                  <Muted style={{ marginTop: 3 }}>{t("remindStartHint")}</Muted>
+                </View>
+                <Switch value={remindStart} onValueChange={toggleStartReminder} trackColor={{ false: "rgba(42,38,34,0.14)", true: colors.ink }} thumbColor="#ffffff" />
+              </View>
+              {remindStart && (
+                <View style={{ marginTop: 12 }}>
+                  <ChipWall options={START_TIMES} value={startTime} onChange={pickStartTime} show={5} mono />
+                </View>
+              )}
             </>
           )}
         </Card>
@@ -144,6 +205,16 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
             <View style={{ marginTop: 10 }}>
               <Btn label={copied ? t("copiedCode") : `⧉  ${t("copyCode")}`} onPress={() => copyCode(gc.gc_code)} variant="outline" />
             </View>
+          </Card>
+        )}
+
+        {/* Weekly payroll export — SM only, needs a registered team. */}
+        {me?.role === "site_manager" && (gc?.gc_code || me?.gc_code) && (
+          <Card>
+            <GroupLabel>{t("payrollTitle")}</GroupLabel>
+            <Muted style={{ marginBottom: 10 }}>{t("payrollHint")}</Muted>
+            <Btn label={payroll.busy ? t("saving") : `⇩  ${t("payrollExport")}`} onPress={exportPayroll} variant="outline" disabled={payroll.busy} />
+            {payroll.msg && <Muted style={{ marginTop: 8 }}>{payroll.msg}</Muted>}
           </Card>
         )}
 

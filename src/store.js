@@ -52,7 +52,7 @@ const EMPTY = {
   // record-for-someone-else picker works offline. Refreshed opportunistically.
   team_roster: [],    // { worker_id, display_name, role, trade }
   days: {},           // `${project_id}:${work_date}` -> {status, submitted_at, submitted_by}
-  settings: { lang: "en", recorded_by: "", lastPhase: null, lastArea: null, wifiOnlyPhotos: false, remindEndOfDay: false, reminderTime: "17:00" },
+  settings: { lang: "en", recorded_by: "", lastPhase: null, lastArea: null, wifiOnlyPhotos: false, remindEndOfDay: false, reminderTime: "17:00", remindStartOfDay: false, startReminderTime: "06:30" },
 };
 
 export async function load() {

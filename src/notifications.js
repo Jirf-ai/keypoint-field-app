@@ -6,10 +6,35 @@
 // local schedule; the whole module no-ops there. Never throws.
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
+import { call } from "./api";
 import { STRINGS } from "./i18n";
-import { getSettings, loggedLaborToday, openClock } from "./store";
+import { todayStr } from "./schema";
+import { activeProfile, clockFor, getSettings, loggedLaborToday, openClock } from "./store";
 
 const HORIZON_DAYS = 7;
+
+// Incident push (2026-07-31): native installs register their Expo push token
+// so this worker can be pinged (site managers get incident alerts the moment
+// a report syncs). Web has no Expo push — whole thing no-ops there, and any
+// native failure (no permission, no EAS project yet) is silently skipped:
+// push is a bonus channel, never a blocker. Once per app session.
+let _pushRegistered = false;
+export async function registerPushToken() {
+  if (Platform.OS === "web" || _pushRegistered) return;
+  const me = activeProfile();
+  if (!me?.worker_id) return;
+  try {
+    if (!(await ensureReady())) return;
+    const projectId = Constants?.expoConfig?.extra?.eas?.projectId;
+    const token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined))?.data;
+    if (!token) return;
+    _pushRegistered = true;
+    call("push-token", { worker_id: me.worker_id, token }).catch(() => {});
+  } catch {
+    // Expected until native builds exist — never surface this to the crew.
+  }
+}
 
 // Show the banner even if the app is foregrounded (older key kept for back-compat).
 if (Platform.OS !== "web") {
@@ -59,48 +84,57 @@ export async function syncReminders() {
   } catch {}
   const st = getSettings();
   const clockRunning = !!openClock();
-  if (!st.remindEndOfDay && !clockRunning) return true; // cleanly off
-  if (!(await ensureReady())) return !st.remindEndOfDay; // only the setting reverts
+  const anythingOn = st.remindEndOfDay || st.remindStartOfDay || clockRunning;
+  if (!anythingOn) return true; // cleanly off
+  if (!(await ensureReady())) return !st.remindEndOfDay; // only the evening toggle reverts
 
-  const [h, m] = String(st.reminderTime || "17:00").split(":").map((n) => Number(n) || 0);
   const dict = STRINGS[st.lang] ?? STRINGS.en;
+  const tr = (k) => dict[k] ?? STRINGS.en[k];
   const now = new Date();
+  const at = (timeStr, offsetDays = 0) => {
+    const [h, m] = String(timeStr).split(":").map((n) => Number(n) || 0);
+    const d = new Date(now);
+    d.setDate(now.getDate() + offsetDays);
+    d.setHours(h, m, 0, 0);
+    return d;
+  };
+  const schedule = async (titleKey, bodyKey, when) => {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: { title: tr(titleKey), body: tr(bodyKey) },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: when },
+      });
+    } catch {}
+  };
 
   if (clockRunning) {
     // Quit-time nudge; already past quit time → nag again in 30 minutes.
     // Re-armed on every Today landing, so it keeps firing until the day ends.
-    const when = new Date(now);
-    when.setHours(h, m, 0, 0);
-    if (when <= now) when.setTime(now.getTime() + 30 * 60_000);
-    try {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: dict.stillOnClockQ ?? STRINGS.en.stillOnClockQ,
-          body: dict.stillOnClockBody ?? STRINGS.en.stillOnClockBody,
-        },
-        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: when },
-      });
-    } catch {}
+    let when = at(st.reminderTime || "17:00");
+    if (when <= now) when = new Date(now.getTime() + 30 * 60_000);
+    await schedule("stillOnClockQ", "stillOnClockBody", when);
+  }
+
+  // Morning "Start your day" nudge (2026-07-31). True arrive-at-site geofencing
+  // needs background location = native builds; a fixed morning time covers the
+  // habit until then. Today's is dropped once a clock exists (running or done).
+  if (st.remindStartOfDay) {
+    const clockedToday = clockRunning || !!clockFor(todayStr());
+    for (let offset = 0; offset < HORIZON_DAYS; offset++) {
+      const when = at(st.startReminderTime || "06:30", offset);
+      if (when <= now || (offset === 0 && clockedToday)) continue;
+      await schedule("startReminderTitle", "startReminderBody", when);
+    }
   }
 
   if (!st.remindEndOfDay) return true;
-  const title = dict.reminderTitle ?? STRINGS.en.reminderTitle;
-  const body = dict.reminderBody ?? STRINGS.en.reminderBody;
   const loggedToday = loggedLaborToday();
-
   for (let offset = 0; offset < HORIZON_DAYS; offset++) {
-    const when = new Date(now);
-    when.setDate(now.getDate() + offset);
-    when.setHours(h, m, 0, 0);
+    const when = at(st.reminderTime || "17:00", offset);
     // Drop today's habit reminder if its time has passed, the crew already
     // logged, or the clock nudge above already covers today.
-    if (offset === 0 && (when <= now || loggedToday || clockRunning)) continue;
-    try {
-      await Notifications.scheduleNotificationAsync({
-        content: { title, body },
-        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: when },
-      });
-    } catch {}
+    if (when <= now || (offset === 0 && (loggedToday || clockRunning))) continue;
+    await schedule("reminderTitle", "reminderBody", when);
   }
   return true;
 }

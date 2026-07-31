@@ -12,7 +12,7 @@ import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
 import { activeProfile, clearAllLocal, currentProject, getSettings, load, logOut, myProjects, pendingCount, recentProjects, removeProjectFromList, saveSettings, setCurrentProject } from "./src/store";
 import { refreshLocation } from "./src/location";
-import { syncReminders } from "./src/notifications";
+import { registerPushToken, syncReminders } from "./src/notifications";
 import { onSyncActivity, syncNow } from "./src/sync";
 import AuthScreen from "./src/screens/AuthScreen";
 import AddItemScreen from "./src/screens/AddItemScreen";
@@ -205,6 +205,7 @@ export default function App() {
     syncNow().then(() => setTick((x) => x + 1));
     refreshLocation(); // warm the cache so line entries carry a recent fix
     syncReminders();   // re-arm the end-of-day nudge; drops today's once logged
+    registerPushToken(); // native only — registers for incident push alerts
   }, [ready, profile, screen]);
 
   // "Which project today?" — on the FIRST landing of a new day, a worker with

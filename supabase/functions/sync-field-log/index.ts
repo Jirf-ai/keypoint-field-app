@@ -144,9 +144,16 @@ Deno.serve(async (req) => {
         "recorded_at", "captured_offline", "version", "supersedes", "note"]),
       synced_at: now,
     };
-    const { error } = await supabase.from("field_incidents").upsert(row, { onConflict: "incident_id", ignoreDuplicates: true });
+    // .select() distinguishes a fresh insert (row echoed) from an ignored
+    // duplicate (empty) — a re-synced incident must never re-ping the SMs.
+    const { data: inserted, error } = await supabase.from("field_incidents")
+      .upsert(row, { onConflict: "incident_id", ignoreDuplicates: true })
+      .select("incident_id");
     if (error) failed.push({ kind: "incident", id, error: error.message });
-    else synced.incidents.push(id);
+    else {
+      synced.incidents.push(id);
+      if (inserted?.length) await pushIncidentAlert(supabase, r);
+    }
   }
 
   // 4b. Day-clock stamps (start/end) — the attendance evidence behind
@@ -293,4 +300,37 @@ function pick(r: Record<string, unknown>, keys: string[]): Record<string, unknow
   const out: Record<string, unknown> = {};
   for (const k of keys) if (r[k] !== undefined) out[k] = r[k];
   return out;
+}
+
+// Incident push (v8): a safety report should ping the reporter's team site
+// managers the moment it lands — not wait for them to open the app. Tokens
+// come from worker_registrations.expo_push_token (native installs only).
+// Fire-and-forget in spirit: any failure here must never fail the sync.
+// deno-lint-ignore no-explicit-any
+async function pushIncidentAlert(supabase: any, r: Record<string, unknown>) {
+  try {
+    const reporterId = str(r.reporter_worker_id);
+    if (!reporterId) return;
+    const { data: reporter } = await supabase.from("worker_registrations")
+      .select("gc_account_id").eq("worker_id", reporterId).maybeSingle();
+    if (!reporter?.gc_account_id) return;
+    const { data: sms } = await supabase.from("worker_registrations")
+      .select("expo_push_token")
+      .eq("gc_account_id", reporter.gc_account_id)
+      .eq("role", "site_manager")
+      .neq("worker_id", reporterId)
+      .not("expo_push_token", "is", null);
+    const tokens = (sms ?? []).map((w: { expo_push_token: string | null }) => w.expo_push_token).filter(Boolean);
+    if (!tokens.length) return;
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(tokens.map((to: string) => ({
+        to,
+        title: "Incident reported",
+        body: `${str(r.reported_by) || "A worker"}: ${str(r.description).slice(0, 120)}`,
+        priority: "high",
+      }))),
+    });
+  } catch { /* push problems never fail a sync */ }
 }
