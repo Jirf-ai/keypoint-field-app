@@ -5,7 +5,7 @@
 // existing line in `editing` prefills the form and saves an append-only
 // correction (amendLine) instead of a new row.
 import { useState } from "react";
-import { Image, Platform, StyleSheet, Switch, Text, View } from "react-native";
+import { Image, StyleSheet, Switch, Text, View } from "react-native";
 import BarcodeScanner from "../components/BarcodeScanner";
 import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, MathStrip, Muted, NoticeCard, NumericField, PickerRow, StickyFooter, preferred } from "../components/ui";
 import { phaseLabel } from "../i18n";
@@ -183,9 +183,7 @@ export default function AddItemScreen({ t, lang, workDate, onDone, fromPhoto, ed
       <Card>
         <GroupLabel right={t("optional")}>{t("paperTrail")}</GroupLabel>
         <Field label={t("skuCode")} value={sku} onChangeText={setSku} autoCapitalize="characters" placeholder="—" style={{ marginBottom: 8 }} />
-        {Platform.OS !== "web" && (
-          <Btn label={`▥  ${t("scanBarcode")}`} onPress={() => setScanning(true)} variant="outline" style={{ minHeight: 44, marginBottom: 8 }} />
-        )}
+        <Btn label={`▥  ${t("scanBarcode")}`} onPress={() => setScanning(true)} variant="outline" style={{ minHeight: 44, marginBottom: 8 }} />
         <Field label={t("vendor")} value={vendor} onChangeText={setVendor} placeholder="—" style={{ marginBottom: 8 }} />
         <Field label={t("invoice")} value={invoice} onChangeText={setInvoice} autoCapitalize="none" placeholder="—" />
         {cos.length > 0 && (

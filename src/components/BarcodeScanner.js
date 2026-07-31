@@ -1,8 +1,8 @@
 // Full-screen barcode / QR scanner (SM-11). Opens the camera, reads the first
 // code it sees, hands the raw value back to the caller (which drops it into the
-// SKU field), then closes. Native only — the caller gates the entry point so the
-// web preview keeps manual entry. Keypoint system: dark scrim, orange scan
-// window, one Cancel action.
+// SKU field), then closes. Native builds resolve this file; the web export gets
+// BarcodeScanner.web.js (BarcodeDetector / ZXing) with the same contract.
+// Keypoint system: dark scrim, orange scan window, one Cancel action.
 import { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
