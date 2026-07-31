@@ -2,16 +2,25 @@
 
 The web app is hosted on **Cloudflare Pages** → **https://keypoint-field.pages.dev**.
 
-## How deploys happen now (manual — the pilot flow)
+## How deploys happen now (CI on push to main)
 
-Deploys are **manual and deliberate**: someone builds locally and pushes the
-finished files to Cloudflare with `wrangler`. This is on purpose during the pilot
-— nothing reaches the crew's phones until we choose to deploy after testing. That
-manual gate is a feature, not a gap.
+Since 2026-07-31, every push to `main` runs `.github/workflows/deploy.yml`:
+build → preview deploy (`fix-check` branch) → **headless render check** (the
+app must actually paint — a build once shipped blank-white with a valid
+bundle hash) → promote to production. Watch runs with `gh run list`.
+
+**It needs two GitHub repo secrets** (Settings → Secrets and variables →
+Actions): `CLOUDFLARE_API_TOKEN` (a Cloudflare API token with Pages edit
+permission) and `CLOUDFLARE_ACCOUNT_ID`. Without them the workflow fails
+fast with an error naming this fix — nothing deploys.
+
+## Manual deploy (fallback / emergency)
+
+The pre-CI flow still works from any machine with wrangler auth:
 
 ```
 npm run build                       # expo export (web) + patch-dist  →  dist/
-npx wrangler pages deploy dist      # upload dist/ to the Cloudflare Pages project
+npx wrangler pages deploy dist --project-name keypoint-field --branch main
 ```
 
 `npm run build` runs:
@@ -35,25 +44,6 @@ EXPO_NO_TYPESCRIPT_SETUP=1 expo export --platform web && node scripts/patch-dist
 Cloudflare serves at the domain root, so the relative paths patch-dist writes work
 as-is. Do **not** set `GITHUB_PAGES=true` — that adds the `/keypoint-field-app`
 base path (app.config.js), which is only for the retired GitHub Pages host.
-
-## Optional post-pilot upgrade: push-to-deploy (Git integration)
-
-Not set up, and deliberately deferred until after the pilot (auto-deploy would push
-work-in-progress commits straight to the field). When the app settles down, connect
-the repo in the Cloudflare dashboard so Cloudflare rebuilds and deploys on every
-push to `main` — no PC, no manual `wrangler`.
-
-The build script this needs is **already in the repo** (`npm run build`, above), so
-it won't ship the offline-broken build the old GitHub Pages workflow did. Dashboard
-settings (Settings → Builds & deployments) would be:
-
-| Setting | Value |
-| --- | --- |
-| Production branch | `main` |
-| Build command | `npm run build` |
-| Build output directory | `dist` |
-| Root directory | `/` (repo root) |
-| Node version | from `.nvmrc` (`20`) — or env `NODE_VERSION=20` |
 
 ## Other paths (not Cloudflare)
 

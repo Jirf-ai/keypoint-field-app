@@ -9,4 +9,11 @@ module.exports = {
   transform: {
     "^.+\\.js$": ["babel-jest", { presets: [["@babel/preset-env", { targets: { node: "current" } }]] }],
   },
+  // Store tests exercise src/store.js, whose import chain touches native
+  // modules. Map them to stubs — the logic under test is pure JS.
+  moduleNameMapper: {
+    "^react-native$": "<rootDir>/__tests__/mocks/react-native.js",
+    "^@react-native-async-storage/async-storage$":
+      "@react-native-async-storage/async-storage/jest/async-storage-mock",
+  },
 };

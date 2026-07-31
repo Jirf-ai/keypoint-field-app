@@ -9,9 +9,19 @@ import { Platform } from "react-native";
 import { call } from "./api";
 import { areasFor, todayStr } from "./schema";
 import { lastLocation } from "./location";
+import { clearPixels, deletePixels, getPixels, putPixels } from "./photoStore";
 import { shrinkDataUri } from "./util";
 
 const KEY = "kaicon-field:v1";
+
+// Web pixel vault (2026-07-31): photo binaries live in IndexedDB (photoStore),
+// the blob carries "idb:<photo_id>" sentinels. In MEMORY a photo's uri is
+// always the real data URI (hydrated at load) so every consumer — thumbnails,
+// viewer, sync's readB64 — is untouched. The set tracks which photos are
+// confirmed in the vault; only those get sentinel-ized at persist, so a failed
+// vault write falls back to inlining (the pre-vault behavior).
+const IDB_PREFIX = "idb:";
+const pixelsInIdb = new Set();
 
 let state = null;
 
@@ -71,7 +81,42 @@ export async function load() {
     me.recent_projects = state.recent_projects ?? [];
   }
   applyProfileContext();
+  await hydratePixels();
   return state;
+}
+
+// Web: rehydrate vault sentinels into memory, and migrate legacy inline data
+// URIs INTO the vault so the next persist writes a pixel-free blob. Fail-soft
+// throughout — a missing vault entry degrades to a blank thumbnail, never a
+// lost record (the metadata row survives, and the server may hold the binary).
+async function hydratePixels() {
+  if (Platform.OS !== "web") return;
+  for (const p of state.photos) {
+    if (typeof p.uri !== "string") continue;
+    if (p.uri.startsWith(IDB_PREFIX)) {
+      const pix = await getPixels(p.photo_id);
+      if (pix) {
+        p.uri = pix;
+        pixelsInIdb.add(p.photo_id);
+      }
+    } else if (p.uri.startsWith("data:image")) {
+      if (await putPixels(p.photo_id, p.uri)) pixelsInIdb.add(p.photo_id);
+    }
+  }
+}
+
+// The blob written to AsyncStorage: same state, minus pixels that are safely
+// in the vault. Profile selfies stay inline on purpose (small, identity).
+function blobSnapshot() {
+  if (Platform.OS !== "web") return state;
+  return {
+    ...state,
+    photos: state.photos.map((p) =>
+      pixelsInIdb.has(p.photo_id) && typeof p.uri === "string" && p.uri.startsWith("data:image")
+        ? { ...p, uri: IDB_PREFIX + p.photo_id }
+        : p
+    ),
+  };
 }
 
 async function persist() {
@@ -90,20 +135,19 @@ async function persist() {
 
 async function doPersist() {
   try {
-    await AsyncStorage.setItem(KEY, JSON.stringify(state));
+    await AsyncStorage.setItem(KEY, JSON.stringify(blobSnapshot()));
   } catch {
     // Never throw out of a capture path. The in-memory copy stays valid and the
     // next successful persist writes everything (single-blob store).
     //
-    // WEB: the usual cause is the localStorage quota — and a single-blob store
-    // means a failed write silently drops EVERYTHING captured since the last
-    // success (zero-loss violation). Shed image weight and retry: synced
-    // photos first (the server already holds their binary), then unsynced
-    // ones down to a smaller-but-real copy.
+    // WEB: with pixels in the IndexedDB vault the blob is small, so quota
+    // failures should be rare — but a vault-less browser still inlines
+    // pixels, so keep the old rescue: shed image weight and retry (synced
+    // photos first — the server already holds their binary).
     if (Platform.OS !== "web") return;
     if (await shedPhotoWeight()) {
       try {
-        await AsyncStorage.setItem(KEY, JSON.stringify(state));
+        await AsyncStorage.setItem(KEY, JSON.stringify(blobSnapshot()));
       } catch (e) {
         console.error("field-store: persist still failing after photo shrink", e);
       }
@@ -123,6 +167,8 @@ async function shedPhotoWeight() {
     if (smaller) {
       p.uri = smaller;
       changed = true;
+      // Keep the vault copy in step with the shrunk in-memory copy.
+      if (pixelsInIdb.has(p.photo_id)) await putPixels(p.photo_id, smaller);
     }
   }
   return changed;
@@ -426,6 +472,8 @@ export async function clearAllLocal() {
   clearTimeout(persist._t);
   state = JSON.parse(JSON.stringify(EMPTY));
   applyProfileContext();
+  pixelsInIdb.clear();
+  await clearPixels(); // wipe the pixel vault along with the blob
   try {
     await AsyncStorage.removeItem(KEY);
   } catch {
@@ -482,6 +530,11 @@ export async function amendLine(line_id, patch) {
 
 export async function addPhoto(photo) {
   const p = stamp({ photo_id: uuid(), ...photo });
+  // Vault the pixels BEFORE the blob write — only a confirmed vault copy lets
+  // persist swap the uri for a sentinel; otherwise it inlines (old behavior).
+  if (Platform.OS === "web" && typeof p.uri === "string" && p.uri.startsWith("data:image")) {
+    if (await putPixels(p.photo_id, p.uri)) pixelsInIdb.add(p.photo_id);
+  }
   state.photos.push(p);
   // A photo added to a submitted day is new record too — mark the day
   // amended so "Submit more!" lights back up (Jeffrey 2026-07-30).
@@ -671,6 +724,8 @@ export async function deletePhoto(photo_id) {
   p.uri = null; // drop the local binary immediately
   p.line_id = null;
   p.synced_at = null; // queue the tombstone for the server
+  pixelsInIdb.delete(photo_id);
+  await deletePixels(photo_id); // the vault copy goes with it
   const day = state.days[dayKey(p.work_date)];
   if (day && day.status === "submitted") day.status = "amended";
   await persist();
