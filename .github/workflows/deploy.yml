@@ -1,0 +1,58 @@
+name: Deploy field app to Cloudflare Pages
+
+# Every push to main: build -> fix-check preview -> headless render check -> production.
+# The render check is mandatory (a build once shipped blank-white with a valid bundle hash).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-check-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build web bundle
+        run: EXPO_NO_TYPESCRIPT_SETUP=1 npx expo export --platform web && node scripts/patch-dist.js
+
+      - name: Deploy preview (fix-check)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler pages deploy dist --project-name keypoint-field --branch fix-check --commit-dirty=true | tee deploy.log
+          grep -o 'https://[a-z0-9]*\.keypoint-field\.pages\.dev' deploy.log | head -1 > preview-url.txt
+          cat preview-url.txt
+
+      - name: Render check on preview
+        run: |
+          URL=$(cat preview-url.txt)
+          for i in 1 2 3; do
+            google-chrome --headless --disable-gpu --no-sandbox --virtual-time-budget=15000 --dump-dom "$URL" > render.html 2>/dev/null || true
+            if grep -q "Get started\|I'm on a crew" render.html; then
+              echo "Render check PASSED on $URL"; exit 0
+            fi
+            echo "Attempt $i: app UI not found in rendered DOM, retrying..."; sleep 10
+          done
+          echo "Render check FAILED - refusing to promote to production"
+          head -c 2000 render.html
+          exit 1
+
+      - name: Promote to production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages deploy dist --project-name keypoint-field --branch main --commit-dirty=true
