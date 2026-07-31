@@ -185,6 +185,7 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
             code={projectMeta.code}
             name={projectMeta.display}
             role={activeProfile()?.role}
+            roleLabel={t(isSM ? "roleSMShort" : "roleCrewShort")}
             city={projectMeta.city}
             date={dateLabel + statusTag}
             onPress={onOpenProjects}

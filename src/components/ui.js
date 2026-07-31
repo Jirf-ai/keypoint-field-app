@@ -295,10 +295,13 @@ export function NoticeCard({ tone = "error", title, children, style }) {
 }
 
 // ------------------------------------------------------------------ status
-export function StatusPill({ label, color }) {
+// `solid` flips the pill from a tint to a full-color fill — used where the
+// label must be unmissable (the role tag on the Today plate: Jeffrey
+// 2026-07-31, after mistaking the SM surface for the crew one).
+export function StatusPill({ label, color, solid }) {
   return (
-    <View style={[s.statusPill, { backgroundColor: color.bg }]}>
-      <Text style={[s.statusPillText, { color: color.color }]}>{label}</Text>
+    <View style={[s.statusPill, solid ? { backgroundColor: color.color } : { backgroundColor: color.bg }]}>
+      <Text style={[s.statusPillText, { color: solid ? "#faf6ee" : color.color }]}>{label}</Text>
     </View>
   );
 }
@@ -309,7 +312,7 @@ export const ROLE_PILL = {
 };
 
 // ------------------------------------------------------------------ project plate
-export function ProjectPlate({ code, name, role, city, date, onPress, hint }) {
+export function ProjectPlate({ code, name, role, roleLabel, city, date, onPress, hint }) {
   const pill = ROLE_PILL[role] ?? ROLE_PILL.journeyman;
   return (
     <Pressable
@@ -322,7 +325,9 @@ export function ProjectPlate({ code, name, role, city, date, onPress, hint }) {
     >
       <View style={s.plateRow1}>
         <Text style={type.projectCode}>{code}</Text>
-        <StatusPill label={pill.label} color={pill.color} />
+        {/* Solid fill + localized full role name: which side of the app you
+            are on must read at a glance (SM orange / crew green). */}
+        <StatusPill label={roleLabel ?? pill.label} color={pill.color} solid />
         <View style={{ flex: 1 }} />
         {/* Left-pointing affordance: the drawer comes FROM the left, so the
             chip points left and says what opens — clearer than a bare caret. */}
