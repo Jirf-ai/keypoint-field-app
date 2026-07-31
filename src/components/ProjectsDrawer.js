@@ -69,10 +69,9 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
           </View>
         </View>
 
-        {/* TWO codes exist and GCs must never mix them up (Jeffrey
-            2026-07-30): this one shares the PROJECT LIST with crew who already
-            have accounts; the company TEAM code (Settings) is what NEW crew
-            register with. Non-breaking hyphen so the code never splits. */}
+        {/* TWO codes exist — the explicit "Project-list code" label keeps them
+            straight (the TEAM code lives in Settings). Non-breaking hyphen so
+            the code never splits. */}
         {isSM && shareCode ? (
           <View style={s.codeBlock}>
             <View style={s.shareRow}>
@@ -92,7 +91,6 @@ export default function ProjectsDrawer({ open, onClose, t, profile, role, curren
                 <Text style={s.copyChipText}>{copied ? `✓ ${t("copiedCode")}` : `⧉ ${t("copyCode")}`}</Text>
               </Pressable>
             </View>
-            <Text style={s.shareHint}>{t("projectListCodeHint")}</Text>
           </View>
         ) : null}
 
