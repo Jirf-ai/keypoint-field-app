@@ -496,12 +496,13 @@ export async function addPhoto(photo) {
 // Clearing synced_at re-queues it so the server copy carries the new tags
 // (same merge-upsert-on-photo_id path linkPhoto uses). Editing a submitted
 // day's photo marks the day amended, same as adding one.
-export async function updatePhotoMeta(photo_id, { caption, phase, area }) {
+export async function updatePhotoMeta(photo_id, { caption, phase, area, photo_kind }) {
   const p = state.photos.find((x) => x.photo_id === photo_id);
   if (!p) return null;
   if (caption !== undefined) p.caption = caption?.trim() || null;
   if (phase !== undefined) p.phase = phase;
   if (area !== undefined) p.area = area;
+  if (photo_kind !== undefined) p.photo_kind = photo_kind;
   p.synced_at = null;
   const day = state.days[dayKey(p.work_date)];
   if (day && day.status === "submitted") day.status = "amended";

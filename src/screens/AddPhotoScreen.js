@@ -7,7 +7,7 @@ import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native
 import * as ImagePicker from "expo-image-picker";
 import { File, Paths } from "expo-file-system";
 import { refreshLocation } from "../location";
-import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, PickerRow, StickyFooter, preferred } from "../components/ui";
+import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, PickerRow, Segmented, StickyFooter, preferred } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { PHASES, photoFilename } from "../schema";
 import { parseProject } from "../components/ProjectPicker";
@@ -21,6 +21,10 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
   const st = getSettings();
   const [assets, setAssets] = useState([]); // pending, NOT saved yet
   const [caption, setCaption] = useState("");
+  // Work vs receipt (2026-07-31): one tap separates jobsite evidence from the
+  // paper trail. Applies to the whole batch — crews don't mix receipts and
+  // progress shots in one capture session.
+  const [kind, setKind] = useState("work");
   // Auto-tag phase/area with the day's last-used values (PRD §5.1); overridable.
   const [phase, setPhase] = useState(st.lastPhase);
   const [area, setArea] = useState(st.lastArea);
@@ -81,6 +85,7 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
         uri: storedUri,
         filename,
         caption: caption.trim() || null,
+        photo_kind: kind,
         phase,
         area,
         line_id: lineId,
@@ -140,7 +145,14 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
       </Card>
 
       <Card>
-        <Field label={t("caption")} value={caption} onChangeText={setCaption} autoCapitalize="sentences" placeholder="—" />
+        <GroupLabel>{t("photoKind")}</GroupLabel>
+        <Segmented
+          options={["work", "receipt"]}
+          value={kind}
+          onChange={setKind}
+          renderLabel={(k) => (k === "work" ? t("kindWork") : `🧾 ${t("kindReceipt")}`)}
+        />
+        <Field label={t("caption")} value={caption} onChangeText={setCaption} autoCapitalize="sentences" placeholder="—" style={{ marginTop: 14 }} />
         <GroupLabel style={{ marginTop: 14 }}>{t("phase")}</GroupLabel>
         <ChipWall options={PHASE_ORDER} value={phase} onChange={setPhase} renderLabel={(p) => phaseLabel(p, lang)} show={4} />
         <GroupLabel style={{ marginTop: 14 }}>{t("area")}</GroupLabel>

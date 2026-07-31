@@ -379,8 +379,9 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
                 <View style={s.inboxRow}>
                   {inbox.map((p) => (
-                    <Pressable key={p.photo_id} onPress={() => onFillPhoto(p)} accessibilityRole="button" accessibilityLabel={t("needDetails")}>
+                    <Pressable key={p.photo_id} style={s.crewThumbWrap} onPress={() => onFillPhoto(p)} accessibilityRole="button" accessibilityLabel={t("needDetails")}>
                       <Image source={{ uri: p.uri }} style={s.inboxThumb} resizeMode="cover" />
+                      {p.photo_kind === "receipt" && <Text style={s.kindBadge}>🧾</Text>}
                     </Pressable>
                   ))}
                 </View>
@@ -402,6 +403,7 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
                 <Pressable key={p.photo_id} style={s.crewThumbWrap} onPress={() => setViewPhoto(p)} accessibilityRole="button" accessibilityLabel={t("todaysPhotos")}>
                   <Image source={{ uri: p.uri }} style={s.crewThumb} resizeMode="cover" />
                   <View style={[s.syncDot, { backgroundColor: p.synced_at ? colors.green : colors.accent }]} />
+                  {p.photo_kind === "receipt" && <Text style={s.kindBadge}>🧾</Text>}
                 </Pressable>
               ))}
             </View>
@@ -648,6 +650,8 @@ const s = StyleSheet.create({
   crewThumbWrap: { position: "relative" },
   crewThumb: { width: 72, height: 72, borderRadius: 10, backgroundColor: colors.surfaceSunken, borderWidth: 1, borderColor: colors.borderStrong },
   syncDot: { position: "absolute", top: -4, right: -4, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: colors.bg },
+  // Receipt marker — bottom-left so it never collides with the sync dot.
+  kindBadge: { position: "absolute", bottom: 3, left: 3, fontSize: 13, backgroundColor: "rgba(255,255,255,0.92)", borderRadius: 6, overflow: "hidden", paddingHorizontal: 2, paddingVertical: 1 },
   submittedBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#15803d14", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12 },
   submittedEmoji: { fontSize: 16 },
   submittedText: { fontFamily: fonts.display, fontSize: 15, fontWeight: "800", color: colors.green },
