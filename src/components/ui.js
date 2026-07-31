@@ -309,15 +309,27 @@ export const ROLE_PILL = {
 };
 
 // ------------------------------------------------------------------ project plate
-export function ProjectPlate({ code, name, role, city, date, onPress }) {
+export function ProjectPlate({ code, name, role, city, date, onPress, hint }) {
   const pill = ROLE_PILL[role] ?? ROLE_PILL.journeyman;
   return (
-    <Pressable onPress={onPress} style={s.plate} accessibilityRole="button" accessibilityLabel={name}>
+    <Pressable
+      onPress={onPress}
+      // Pressed "pop": the plate visibly reacts to the tap, then the drawer
+      // slides in from the left (Jeffrey 2026-07-30 — the action must read).
+      style={({ pressed }) => [s.plate, pressed && s.platePressed]}
+      accessibilityRole="button"
+      accessibilityLabel={name}
+    >
       <View style={s.plateRow1}>
         <Text style={type.projectCode}>{code}</Text>
         <StatusPill label={pill.label} color={pill.color} />
         <View style={{ flex: 1 }} />
-        <Text style={s.plateCaret}>▾</Text>
+        {/* Left-pointing affordance: the drawer comes FROM the left, so the
+            chip points left and says what opens — clearer than a bare caret. */}
+        <View style={s.plateHint}>
+          <Text style={s.plateHintArrow}>‹</Text>
+          {hint ? <Text style={s.plateHintText}>{hint}</Text> : null}
+        </View>
       </View>
       <Text style={s.plateName}>{name}</Text>
       <View style={s.plateDivider} />
@@ -520,7 +532,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
   },
   plateRow1: { flexDirection: "row", alignItems: "center", gap: 8 },
-  plateCaret: { color: colors.accent, fontSize: 13, fontWeight: "800" },
+  platePressed: { transform: [{ scale: 0.975 }], opacity: 0.9 },
+  plateHint: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: "#d95a1f44", backgroundColor: "#d95a1f0d", borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9 },
+  plateHintArrow: { color: colors.accent, fontSize: 14, fontWeight: "800", lineHeight: 15 },
+  plateHintText: { fontFamily: fonts.body, fontSize: 10, fontWeight: "700", color: colors.accent, textTransform: "uppercase", letterSpacing: 0.6 },
   plateName: { ...type.projectName, lineHeight: 22, marginTop: 8 },
   plateDivider: { height: 1, backgroundColor: "rgba(42,38,34,0.1)", marginTop: 9, marginBottom: 8 },
   plateRow3: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },

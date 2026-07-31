@@ -89,6 +89,7 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
             city={projectMeta.city}
             date={dateLabel + statusTag}
             onPress={onOpenProjects}
+            hint={t("projectsLabel")}
           />
         ) : (
           <Pressable onPress={onOpenProjects} style={s.projectSlot} accessibilityRole="button" accessibilityLabel={t("findProject")}>
