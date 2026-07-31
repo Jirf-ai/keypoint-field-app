@@ -361,7 +361,6 @@ export default function App() {
 
         {authed && screen === "today" && (
           <TodayScreen
-            key={tick}
             t={t}
             lang={lang}
             workDate={workDate}

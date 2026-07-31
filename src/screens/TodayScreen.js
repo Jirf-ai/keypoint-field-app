@@ -102,7 +102,7 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
     if (refreshing) return;
     if (pullVal.current > 55) {
       setRefreshing(true);
-      Animated.timing(pull, { toValue: 64, duration: 140, useNativeDriver: false }).start();
+      Animated.timing(pull, { toValue: 64, duration: 260, easing: Easing.inOut(Easing.quad), useNativeDriver: false }).start();
       // The refresh: drain pending sync + ask for a newer app version. If one
       // exists, the AppUpdatePill flow takes over (spin → dissolve → reload).
       try {
@@ -115,11 +115,12 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
           // — an instant spring-back reads as "nothing happened" (Jeffrey).
           new Promise((res) => setTimeout(res, 2000)),
         ]);
-      } catch { /* offline pull just springs back */ }
+      } catch { /* offline pull just glides back */ }
       setRefreshing(false);
-      Animated.timing(pull, { toValue: 0, duration: 240, easing: Easing.out(Easing.quad), useNativeDriver: false }).start(() => onSync?.());
+      // Instagram-soft return: one long ease-in-out glide, never a bounce.
+      Animated.timing(pull, { toValue: 0, duration: 550, easing: Easing.inOut(Easing.cubic), useNativeDriver: false }).start(() => onSync?.());
     } else {
-      Animated.timing(pull, { toValue: 0, duration: 180, easing: Easing.out(Easing.quad), useNativeDriver: false }).start();
+      Animated.timing(pull, { toValue: 0, duration: 380, easing: Easing.inOut(Easing.cubic), useNativeDriver: false }).start();
     }
   };
   const pullRotate = refreshing
@@ -135,8 +136,11 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
   const photos = photosFor(workDate);
   const totals = visibleTotals(workDate);
   const status = dayStatus(workDate);
-  // Photo inbox: open while the day is live, folded once submitted.
+  // Photo inbox: open while the day is live, folded once submitted. Synced by
+  // effect because this screen re-renders in place now (no more key={tick}
+  // remounts — those were wiping the pull-to-refresh animation mid-gesture).
   const [inboxOpen, setInboxOpen] = useState(status === "draft");
+  useEffect(() => { setInboxOpen(status === "draft"); }, [status]);
   const me = activeProfile();
   const isSM = me?.role === "site_manager";
   const myName = me?.display_name;
