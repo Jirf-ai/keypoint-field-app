@@ -74,9 +74,12 @@ const iconSizes = [192, 512];
 for (const sz of iconSizes) {
   fs.copyFileSync(path.join(__dirname, "..", "assets", `icon-${sz}.png`), path.join(dist, `icon-${sz}.png`));
 }
+// "Kaicon Field" everywhere a phone shows the installed name — matches the
+// printed install card (Kaicon = the outward brand; short_name is the
+// home-screen label and fits unabbreviated).
 fs.writeFileSync(path.join(dist, "manifest.webmanifest"), JSON.stringify({
-  name: "Keypoint Field",
-  short_name: "Field",
+  name: "Kaicon Field",
+  short_name: "Kaicon Field",
   start_url: "./",
   scope: "./",
   display: "standalone",
@@ -96,7 +99,7 @@ if (!html.includes("apple-mobile-web-app-capable")) {
   html = html.replace("</head>", `  <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Keypoint Field" />
+    <meta name="apple-mobile-web-app-title" content="Kaicon Field" />
     <link rel="apple-touch-icon" href="./icon.png" />
     <script>
       if ("serviceWorker" in navigator) {
