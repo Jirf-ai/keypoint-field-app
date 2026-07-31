@@ -3,9 +3,9 @@
 // the surface: crew log hours + photos; site managers add materials, review,
 // submit, and raise change orders.
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { parseProject } from "../components/ProjectPicker";
-import { isSyncing } from "../sync";
+import { isSyncing, syncNow } from "../sync";
 import { Btn, Card, CaptureTiles, EmptyState, GroupLabel, LedgerRow, Muted, ProjectPlate, usd, usdCents } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import {
@@ -45,6 +45,70 @@ function UpdatingSpinner({ t }) {
 }
 
 export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, onFillPhoto, onEditLine, onProjectChange, onOpenProjects }) {
+  // ---- Pull-to-refresh (Jeffrey 2026-07-30, Instagram-style): drag down from
+  // the top, the brand diamond appears in the stretch gap and spins while the
+  // app syncs pending work and checks for a new version, then the page springs
+  // back. The diamond rotates WITH the drag before release — it feels held.
+  const scrollTop = useRef(0);
+  const pull = useRef(new Animated.Value(0)).current;
+  const pullVal = useRef(0);
+  useEffect(() => {
+    const id = pull.addListener(({ value }) => { pullVal.current = value; });
+    return () => pull.removeListener(id);
+  }, [pull]);
+  const gesture = useRef({ startY: null, active: false });
+  const [refreshing, setRefreshing] = useState(false);
+  const spin = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!refreshing) return;
+    const loop = Animated.loop(
+      Animated.timing(spin, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: false }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [refreshing, spin]);
+
+  const touchY = (e) => e.nativeEvent.touches?.[0]?.pageY ?? e.nativeEvent.pageY;
+  const onPullStart = (e) => {
+    gesture.current = scrollTop.current <= 1 && !refreshing
+      ? { startY: touchY(e), active: true }
+      : { startY: null, active: false };
+  };
+  const onPullMove = (e) => {
+    const g = gesture.current;
+    if (!g.active || refreshing) return;
+    const dy = touchY(e) - g.startY;
+    if (dy > 0 && scrollTop.current <= 1) pull.setValue(Math.min(110, dy * 0.5));
+  };
+  const onPullEnd = async () => {
+    const g = gesture.current;
+    g.active = false;
+    if (refreshing) return;
+    if (pullVal.current > 55) {
+      setRefreshing(true);
+      Animated.timing(pull, { toValue: 64, duration: 140, useNativeDriver: false }).start();
+      // The refresh: drain pending sync + ask for a newer app version. If one
+      // exists, the AppUpdatePill flow takes over (spin → dissolve → reload).
+      try {
+        await Promise.allSettled([
+          syncNow(),
+          Platform.OS === "web" && typeof navigator !== "undefined" && navigator.serviceWorker
+            ? navigator.serviceWorker.getRegistration().then((r) => r?.update())
+            : Promise.resolve(),
+          new Promise((res) => setTimeout(res, 900)), // let the spin read
+        ]);
+      } catch { /* offline pull just springs back */ }
+      setRefreshing(false);
+      Animated.timing(pull, { toValue: 0, duration: 240, easing: Easing.out(Easing.quad), useNativeDriver: false }).start(() => onSync?.());
+    } else {
+      Animated.timing(pull, { toValue: 0, duration: 180, easing: Easing.out(Easing.quad), useNativeDriver: false }).start();
+    }
+  };
+  const pullRotate = refreshing
+    ? spin.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] })
+    : pull.interpolate({ inputRange: [0, 110], outputRange: ["0deg", "300deg"] });
+  const pullScale = pull.interpolate({ inputRange: [0, 64], outputRange: [0.3, 1], extrapolate: "clamp" });
+
   const project = currentProject();
   const projectMeta = project ? parseProject(project) : null;
   // Role-scoped: crew see only their own hours/wage; materials and other
@@ -78,7 +142,18 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
   const crew = isSM ? crewLogStatus(workDate) : null;
 
   return (
-    <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}>
+    <View style={{ flex: 1 }} onTouchStart={onPullStart} onTouchMove={onPullMove} onTouchEnd={onPullEnd} onTouchCancel={onPullEnd}>
+      {/* The stretch gap: the brand diamond grows and turns with the drag,
+          spins while refreshing, and the page springs back when done. */}
+      <Animated.View style={[s.pullGap, { height: pull }]} pointerEvents="none">
+        <Animated.Text style={[s.pullDiamond, { transform: [{ rotate: pullRotate }, { scale: pullScale }] }]}>◆</Animated.Text>
+      </Animated.View>
+    <ScrollView
+      contentContainerStyle={{ paddingVertical: 12, paddingBottom: 40 }}
+      onScroll={(e) => { scrollTop.current = e.nativeEvent.contentOffset?.y ?? 0; }}
+      scrollEventThrottle={16}
+      style={Platform.OS === "web" ? { overscrollBehaviorY: "contain" } : undefined}
+    >
       {/* The plate opens the projects drawer (the single place to switch, add,
           or see your team code). No inline dropdown — that lived here before and
           duplicated the drawer. */}
@@ -299,6 +374,7 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
         </View>
       )}
     </ScrollView>
+    </View>
   );
 }
 
@@ -358,6 +434,8 @@ const s = StyleSheet.create({
   guideRow: { flexDirection: "row", gap: 10, marginTop: 4, alignItems: "flex-start" },
   guideNum: { fontFamily: fonts.mono, color: colors.accent, fontSize: 12, fontWeight: "700", width: 22, lineHeight: 22 },
   guideText: { fontFamily: fonts.body, color: colors.text, fontSize: 14, fontWeight: "600", lineHeight: 22, flex: 1 },
+  pullGap: { alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  pullDiamond: { fontSize: 30, lineHeight: 36, color: colors.accent },
   inboxHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   inboxChevron: { color: colors.accent, fontSize: 14, fontWeight: "800" },
   inboxRow: { flexDirection: "row", gap: 8 },
