@@ -9,8 +9,11 @@ import PhotoViewer from "../components/PhotoViewer";
 import { isSyncing, syncNow } from "../sync";
 import { Btn, Card, CaptureTiles, EmptyState, GroupLabel, LedgerRow, Muted, ProjectPlate, usd, usdCents } from "../components/ui";
 import { phaseLabel } from "../i18n";
+import { syncReminders } from "../notifications";
 import {
   activeProfile,
+  clockFor,
+  clockStart,
   crewLogStatus,
   currentProject,
   dayStatus,
@@ -18,6 +21,7 @@ import {
   incidentsFor,
   deletePhoto,
   myWeekHours,
+  openClock,
   photosFor,
   updatePhotoMeta,
   visibleLines,
@@ -43,6 +47,85 @@ function UpdatingSpinner({ t }) {
     <View style={s.updatingRow}>
       <Animated.Text style={[s.updatingDiamond, { transform: [{ rotate }] }]}>◆</Animated.Text>
       <Text style={s.updatingText}>{t("updating")}</Text>
+    </View>
+  );
+}
+
+const locale = (lang) => (lang === "es" ? "es-MX" : lang === "zh" ? "zh-CN" : "en-US");
+const timeStr = (iso, lang) =>
+  new Date(iso).toLocaleTimeString(locale(lang), { hour: "numeric", minute: "2-digit" });
+
+// Start Day / End Day (2026-07-31) — the day's frame, between the plate and
+// the capture tile. Hours come SOLELY from this clock (see EndDayScreen); the
+// running strip is green (= active, like submit/upload) and flips amber when
+// the clock is clearly forgotten. Not a capture tile because it is not a cost
+// record — same rule that keeps the incident button separate.
+function DayClock({ t, lang, workDate, nav, onStart }) {
+  const open = openClock();
+  const done = clockFor(workDate);
+  // Tick the elapsed readout while running; 30s keeps it honest without churn.
+  const [, setTick] = useState(0);
+  const openId = open?.clock_id;
+  useEffect(() => {
+    if (!openId) return;
+    const iv = setInterval(() => setTick((x) => x + 1), 30_000);
+    return () => clearInterval(iv);
+  }, [openId]);
+
+  if (open) {
+    const mins = Math.max(0, Math.floor((Date.now() - new Date(open.at)) / 60000));
+    const overdue = open.work_date !== workDate || mins > 12 * 60;
+    return (
+      <View style={[s.clockCard, overdue && s.clockCardOverdue]}>
+        <View style={{ flex: 1 }}>
+          <View style={s.clockLabelRow}>
+            <View style={[s.clockDot, overdue && s.clockDotOverdue]} />
+            <Text style={[s.clockLabel, overdue && s.clockLabelOverdue]}>
+              {t(overdue ? "stillOnClockQ" : "onTheClock")}
+            </Text>
+          </View>
+          <Text style={s.clockElapsed}>
+            {Math.floor(mins / 60)}:{String(mins % 60).padStart(2, "0")}
+          </Text>
+          <Text style={s.clockSince}>
+            {t("sinceAt")} {timeStr(open.at, lang)}
+            {open.work_date !== workDate ? ` · ${open.work_date}` : ""}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => nav("endday")}
+          style={({ pressed }) => [s.endBtn, pressed && { opacity: 0.85 }]}
+          accessibilityRole="button"
+          accessibilityLabel={t("endDay")}
+        >
+          <Text style={s.endBtnText}>{t("endDay")}</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (done) {
+    return (
+      <View style={s.clockDone}>
+        <Text style={s.clockDoneText}>
+          ✓ {t("dayRecorded")} · {timeStr(done.start.at, lang)} – {timeStr(done.end.at, lang)}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      <Pressable
+        onPress={onStart}
+        style={({ pressed }) => [s.startBtn, pressed && { opacity: 0.85 }]}
+        accessibilityRole="button"
+        accessibilityLabel={t("startDay")}
+      >
+        <Text style={s.startLbl}>{t("startDay")}</Text>
+        <Text style={s.startNow}>{timeStr(new Date().toISOString(), lang)}</Text>
+      </Pressable>
+      <Text style={s.startHint}>{t("startDayHint")}</Text>
     </View>
   );
 }
@@ -131,6 +214,7 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
     : pull.interpolate({ inputRange: [0, 110], outputRange: ["0deg", "300deg"] });
   const pullScale = pull.interpolate({ inputRange: [0, 64], outputRange: [0.3, 1], extrapolate: "clamp" });
 
+  const [, bump] = useState(0);
   const project = currentProject();
   const projectMeta = project ? parseProject(project) : null;
   // Role-scoped: crew see only their own hours/wage; materials and other
@@ -158,11 +242,15 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
   const dateLabel = dateStamp(workDate, lang);
   const statusTag = status !== "draft" ? `  ·  ${t(status === "amended" ? "amended" : "submitted")}` : "";
 
-  const tiles = [
-    { key: "photo", glyph: "📷", label: t("tilePhoto"), tone: "accent" },
-    { key: "labor", glyph: "⏱", label: t("tileHours"), tone: "ink" },
-  ];
-  if (isSM) tiles.push({ key: "item", glyph: "📦", label: t("tileItem"), tone: "ink" });
+  // Crew have no ⏱ Hours tile — the day clock is their only time surface (no
+  // typed hours, no backdoor around the clock). Photo goes full-width: it
+  // really is the one capture action. Site managers keep the form for
+  // on-behalf-of logging and corrections.
+  const tiles = [{ key: "photo", glyph: "📷", label: t("tilePhoto"), tone: "accent" }];
+  if (isSM) {
+    tiles.push({ key: "labor", glyph: "⏱", label: t("tileHours"), tone: "ink" });
+    tiles.push({ key: "item", glyph: "📦", label: t("tileItem"), tone: "ink" });
+  }
 
   // Safety records for the day — everyone sees them (SF-02).
   const incidents = incidentsFor(workDate);
@@ -216,6 +304,23 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
         </View>
       )}
 
+      {/* The day's frame: Start Day stamps attendance immediately; End Day
+          turns the span into labor lines on the receipt screen. Everyone gets
+          their own clock — the SM's works the same as crew. */}
+      {project && (
+        <DayClock
+          t={t}
+          lang={lang}
+          workDate={workDate}
+          nav={nav}
+          onStart={async () => {
+            await clockStart(workDate);
+            syncReminders(); // arm the "still on the clock?" quit-time nudge
+            bump((x) => x + 1);
+          }}
+        />
+      )}
+
       {pending > 0 && (
         <Pressable style={s.pending} onPress={onSync} accessibilityRole="button" accessibilityLabel={t("pending")}>
           <Text style={s.pendingText}>{pending} {t("pending")}</Text>
@@ -251,21 +356,6 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
               <Text style={s.incBy}>{i.reported_by}</Text>
             </View>
           ))}
-        </Card>
-      )}
-
-      {/* Crew guide — the two duties as an orange-numbered list. */}
-      {!isSM && project && !hasEntries && (
-        <Card style={{ marginTop: 14 }}>
-          <GroupLabel>{t("crewGuideTitle")}</GroupLabel>
-          <View style={s.guideRow}>
-            <Text style={s.guideNum}>01</Text>
-            <Text style={s.guideText}>{t("crewGuide1")}</Text>
-          </View>
-          <View style={s.guideRow}>
-            <Text style={s.guideNum}>02</Text>
-            <Text style={s.guideText}>{t("crewGuide2")}</Text>
-          </View>
         </Card>
       )}
 
@@ -379,9 +469,10 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
               const title = isLabor ? `${l.worker} · ${l.hours}h` : l.description;
               const meta = `${phaseLabel(l.phase, lang)} · ${l.area}${!isLabor && l.qty ? ` · ${l.qty} ${l.unit}` : ""}`;
               const row = <LedgerRow cls={l.cost_class} title={title} meta={meta} amount={usdCents(amount)} />;
-              // SM corrects any line; crew only their own hours. Corrections are
-              // append-only — tapping opens the form prefilled (see amendLine).
-              const canEdit = onEditLine && (isSM || (isLabor && l.worker === myName));
+              // SM corrects any line. Crew rows are read-only since the day
+              // clock landed — hours come off the clock, and fixes are the
+              // site manager's (append-only amendLine, named trail).
+              const canEdit = onEditLine && isSM;
               return canEdit ? (
                 <Pressable key={l.line_id} onPress={() => onEditLine(l)} accessibilityRole="button" accessibilityLabel={`${t("edit")} · ${title}`}>
                   {row}
@@ -480,6 +571,54 @@ const s = StyleSheet.create({
   updatingRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   updatingDiamond: { fontSize: 11, lineHeight: 13, color: colors.accent },
   updatingText: { fontFamily: fonts.mono, color: colors.accent, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase" },
+  // ---- day clock (Start Day / End Day) ----
+  startBtn: {
+    backgroundColor: colors.ink,
+    borderRadius: 12,
+    minHeight: 60,
+    marginHorizontal: 14,
+    marginTop: 10,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  startLbl: { fontFamily: fonts.display, fontSize: 18, fontWeight: "800", letterSpacing: -0.3, color: colors.onInk },
+  startNow: { fontFamily: fonts.mono, fontSize: 11.5, fontWeight: "700", color: colors.onInk, opacity: 0.65, fontVariant: ["tabular-nums"] },
+  startHint: { fontFamily: fonts.body, fontSize: 11.5, color: colors.textMuted, marginHorizontal: 18, marginTop: 5 },
+  clockCard: {
+    backgroundColor: "#15803d0d",
+    borderWidth: 1,
+    borderColor: "#15803d33",
+    borderRadius: 12,
+    marginHorizontal: 14,
+    marginTop: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  clockCardOverdue: { backgroundColor: "#a1620710", borderColor: "#a1620744" },
+  clockLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  clockDot: { width: 7, height: 7, borderRadius: 99, backgroundColor: colors.green },
+  clockDotOverdue: { backgroundColor: colors.amber },
+  clockLabel: { fontFamily: fonts.mono, fontSize: 9.5, fontWeight: "700", letterSpacing: 1.33, textTransform: "uppercase", color: colors.green },
+  clockLabelOverdue: { color: colors.amber },
+  clockElapsed: { fontFamily: fonts.display, fontSize: 30, fontWeight: "800", letterSpacing: -0.9, color: colors.text, fontVariant: ["tabular-nums"], marginTop: 2 },
+  clockSince: { fontFamily: fonts.mono, fontSize: 10, fontWeight: "600", letterSpacing: 0.6, textTransform: "uppercase", color: colors.textMuted, marginTop: 1 },
+  endBtn: { backgroundColor: colors.ink, borderRadius: 10, paddingVertical: 13, paddingHorizontal: 16 },
+  endBtnText: { fontFamily: fonts.body, fontSize: 14, fontWeight: "700", color: colors.onInk },
+  clockDone: {
+    backgroundColor: colors.surfaceSunken,
+    borderRadius: 12,
+    marginHorizontal: 14,
+    marginTop: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    alignItems: "center",
+  },
+  clockDoneText: { fontFamily: fonts.mono, fontSize: 11, fontWeight: "700", letterSpacing: 0.4, color: colors.green, fontVariant: ["tabular-nums"] },
   incidentBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -499,9 +638,6 @@ const s = StyleSheet.create({
   incType: { fontFamily: fonts.mono, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase", color: colors.red },
   incDesc: { fontFamily: fonts.body, fontSize: 14, fontWeight: "600", color: colors.text, marginTop: 3, lineHeight: 19 },
   incBy: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  guideRow: { flexDirection: "row", gap: 10, marginTop: 4, alignItems: "flex-start" },
-  guideNum: { fontFamily: fonts.mono, color: colors.accent, fontSize: 12, fontWeight: "700", width: 22, lineHeight: 22 },
-  guideText: { fontFamily: fonts.body, color: colors.text, fontSize: 14, fontWeight: "600", lineHeight: 22, flex: 1 },
   pullGap: { alignItems: "center", justifyContent: "center", overflow: "hidden" },
   pullDiamond: { fontSize: 30, lineHeight: 36, color: colors.accent },
   inboxHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

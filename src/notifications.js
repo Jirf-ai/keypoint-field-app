@@ -7,7 +7,7 @@
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import { STRINGS } from "./i18n";
-import { getSettings, loggedLaborToday } from "./store";
+import { getSettings, loggedLaborToday, openClock } from "./store";
 
 const HORIZON_DAYS = 7;
 
@@ -47,28 +47,54 @@ async function ensureReady() {
 // Reconcile the scheduled reminders with current settings + today's log state.
 // Returns false only when reminders are ON but couldn't be scheduled (no
 // permission, or web) — the caller uses that to revert the toggle.
+//
+// Day clock (2026-07-31): a running clock arms a "Still on the clock?" nudge at
+// the worker's quit time — the main defense against the forgotten-timer day.
+// It does NOT require the remindEndOfDay opt-in: an open clock is state the
+// worker created by tapping Start Day, so nudging about it is expected.
 export async function syncReminders() {
   if (Platform.OS === "web") return !getSettings().remindEndOfDay;
   try {
     await Notifications.cancelAllScheduledNotificationsAsync(); // app owns this namespace
   } catch {}
-  if (!getSettings().remindEndOfDay) return true; // cleanly off
-  if (!(await ensureReady())) return false;
-
   const st = getSettings();
+  const clockRunning = !!openClock();
+  if (!st.remindEndOfDay && !clockRunning) return true; // cleanly off
+  if (!(await ensureReady())) return !st.remindEndOfDay; // only the setting reverts
+
   const [h, m] = String(st.reminderTime || "17:00").split(":").map((n) => Number(n) || 0);
   const dict = STRINGS[st.lang] ?? STRINGS.en;
+  const now = new Date();
+
+  if (clockRunning) {
+    // Quit-time nudge; already past quit time → nag again in 30 minutes.
+    // Re-armed on every Today landing, so it keeps firing until the day ends.
+    const when = new Date(now);
+    when.setHours(h, m, 0, 0);
+    if (when <= now) when.setTime(now.getTime() + 30 * 60_000);
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: dict.stillOnClockQ ?? STRINGS.en.stillOnClockQ,
+          body: dict.stillOnClockBody ?? STRINGS.en.stillOnClockBody,
+        },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: when },
+      });
+    } catch {}
+  }
+
+  if (!st.remindEndOfDay) return true;
   const title = dict.reminderTitle ?? STRINGS.en.reminderTitle;
   const body = dict.reminderBody ?? STRINGS.en.reminderBody;
-  const now = new Date();
   const loggedToday = loggedLaborToday();
 
   for (let offset = 0; offset < HORIZON_DAYS; offset++) {
     const when = new Date(now);
     when.setDate(now.getDate() + offset);
     when.setHours(h, m, 0, 0);
-    // Drop today's reminder if its time has passed or the crew already logged.
-    if (offset === 0 && (when <= now || loggedToday)) continue;
+    // Drop today's habit reminder if its time has passed, the crew already
+    // logged, or the clock nudge above already covers today.
+    if (offset === 0 && (when <= now || loggedToday || clockRunning)) continue;
     try {
       await Notifications.scheduleNotificationAsync({
         content: { title, body },

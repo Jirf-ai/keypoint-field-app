@@ -97,6 +97,33 @@ export const CO_REASONS = [
 ];
 export const CO_STATUS = ["pending", "approved", "rejected", "completed"];
 
+// ---------------------------------------------------------------- day clock
+// Start Day / End Day (2026-07-31): hours come SOLELY from the clock — workers
+// never type or pick a number. These three policy rules replace worker
+// judgment; each is shown on the End Day receipt so the number is never a
+// mystery. Overtime classification belongs to the site manager (>8h auto-splits
+// into a regular + overtime line the SM can amend at review).
+export const CLOCK_POLICY = {
+  roundQuarterHours: 0.25, // DOL-safe: round net time to the nearest ¼ hour
+  lunchMinutes: 30,        // auto-deducted once the raw span exceeds…
+  lunchAfterHours: 6,      // …this many hours on the clock
+  overtimeAfterHours: 8,   // regular caps here; the rest records as overtime
+};
+
+// start/end are ISO strings. Returns everything the receipt shows plus the
+// regular/overtime split. Never negative; a sub-15-minute day rounds to 0 and
+// writes no labor line.
+export function computeClockHours(startISO, endISO) {
+  const elapsedMin = Math.max(0, Math.round((new Date(endISO) - new Date(startISO)) / 60000));
+  const lunchMin = elapsedMin > CLOCK_POLICY.lunchAfterHours * 60 ? CLOCK_POLICY.lunchMinutes : 0;
+  const netMin = Math.max(0, elapsedMin - lunchMin);
+  const step = CLOCK_POLICY.roundQuarterHours;
+  const hours = Math.round(netMin / 60 / step) * step;
+  const regular = Math.min(hours, CLOCK_POLICY.overtimeAfterHours);
+  const overtime = Math.max(0, +(hours - regular).toFixed(2));
+  return { elapsedMin, lunchMin, netMin, hours, regular, overtime };
+}
+
 // Photo naming convention (§4.5): {project-code}-{YYYYMMDD}-{seq}.jpg
 export function photoFilename(dateStr, seq, code) {
   const ymd = dateStr.replaceAll("-", "");

@@ -44,6 +44,10 @@ const EMPTY = {
   photos: [],
   change_orders: [],
   incidents: [],      // SF-02 safety records — any role, append-only
+  // Start Day / End Day (2026-07-31): append-only clock events, the worker's
+  // attendance stamps. Device-local for now (the labor lines they produce ride
+  // the sync spine; syncing the raw events is follow-up server work).
+  clock_events: [],   // { clock_id, event: 'start'|'end', work_date, worker_id, at }
   // Server team roster (worker_registrations under our GC), cached so the
   // record-for-someone-else picker works offline. Refreshed opportunistically.
   team_roster: [],    // { worker_id, display_name, role, trade }
@@ -517,6 +521,75 @@ export async function linkPhoto(photo_id, line_id) {
     await persist();
   }
   return p;
+}
+
+// ------------------------------------------------------------------ day clock
+// Start Day / End Day: hours come solely from these stamps (schema CLOCK_POLICY
+// turns a span into a labor line at End Day — see EndDayScreen). Append-only
+// like everything else; the start stamp is attendance evidence in its own right
+// even if the day is never confirmed.
+export async function clockStart(work_date) {
+  const me = activeProfile();
+  const ev = stamp({
+    clock_id: uuid(),
+    event: "start",
+    work_date,
+    worker_id: me?.worker_id ?? null,
+    worker: me?.display_name ?? state.settings.recorded_by ?? "unknown",
+    at: new Date().toISOString(),
+  });
+  state.clock_events = [...(state.clock_events ?? []), ev];
+  await persist();
+  return ev;
+}
+
+export async function clockEnd(startEvent) {
+  const ev = stamp({
+    clock_id: uuid(),
+    event: "end",
+    work_date: startEvent.work_date, // a forgotten clock closes on ITS day, not today
+    worker_id: startEvent.worker_id,
+    worker: startEvent.worker,
+    starts: startEvent.clock_id,
+    at: new Date().toISOString(),
+  });
+  // An overnight forget means state.current_project may have moved on; the end
+  // stamp must land on the project the start opened.
+  ev.project_id = startEvent.project_id;
+  ev.project_name = startEvent.project_name;
+  state.clock_events = [...(state.clock_events ?? []), ev];
+  await persist();
+  return ev;
+}
+
+// The active worker's dangling start on the current project — today's, or an
+// older one they forgot to close (oldest first, so forgotten days resolve in
+// order before today can start). Null when nothing is running.
+export function openClock() {
+  const me = activeProfile();
+  const pid = state.current_project?.id;
+  if (!me || !pid) return null;
+  const evs = (state.clock_events ?? []).filter(
+    (e) => e.worker_id === me.worker_id && e.project_id === pid
+  );
+  const closed = new Set(evs.filter((e) => e.event === "end").map((e) => e.starts));
+  const open = evs.filter((e) => e.event === "start" && !closed.has(e.clock_id));
+  open.sort((a, b) => (a.at < b.at ? -1 : 1));
+  return open[0] ?? null;
+}
+
+// Today's completed span for the strip's "day recorded" state. Latest pair wins.
+export function clockFor(work_date) {
+  const me = activeProfile();
+  const pid = state.current_project?.id;
+  if (!me || !pid) return null;
+  const evs = (state.clock_events ?? []).filter(
+    (e) => e.worker_id === me.worker_id && e.project_id === pid && e.work_date === work_date
+  );
+  const end = evs.filter((e) => e.event === "end").sort((a, b) => (a.at < b.at ? 1 : -1))[0];
+  if (!end) return null;
+  const start = evs.find((e) => e.clock_id === end.starts);
+  return start ? { start, end } : null;
 }
 
 // SF-02 — file an incident / near-miss. Every role can; nothing about it is
