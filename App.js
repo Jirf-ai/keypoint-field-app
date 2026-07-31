@@ -56,9 +56,11 @@ function ProfileAvatar({ profile }) {
 // Floating pill that makes an APP-VERSION update visible in real time
 // (Jeffrey 2026-07-30: the download was invisible — crews had no way to know
 // whether to wait). Spinning brand diamond + "loading…" while the new build
-// downloads; flips to a tappable "update ready" that reloads into it.
-function AppUpdatePill({ state, t }) {
+// downloads; when it's ready the pill dissolves and the app reloads itself
+// into the new version — no tap, no dance.
+function AppUpdatePill({ state, t, onFaded }) {
   const rot = useRef(new Animated.Value(0)).current;
+  const fade = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (state !== "downloading") return;
     const loop = Animated.loop(
@@ -67,25 +69,18 @@ function AppUpdatePill({ state, t }) {
     loop.start();
     return () => loop.stop();
   }, [state, rot]);
+  useEffect(() => {
+    if (state !== "done") return;
+    Animated.timing(fade, { toValue: 0, duration: 500, easing: Easing.out(Easing.quad), useNativeDriver: false })
+      .start(() => onFaded?.());
+  }, [state, fade, onFaded]);
   if (!state) return null;
-  if (state === "downloading") {
-    const rotate = rot.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
-    return (
-      <View style={s.updatePill} pointerEvents="none">
-        <Animated.Text style={[s.updatePillDiamond, { transform: [{ rotate }] }]}>◆</Animated.Text>
-        <Text style={s.updatePillText}>{t("appLoading")}</Text>
-      </View>
-    );
-  }
+  const rotate = rot.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
   return (
-    <Pressable
-      style={[s.updatePill, s.updatePillReady]}
-      onPress={() => { try { window.location.reload(); } catch { /* native never gets here */ } }}
-      accessibilityRole="button"
-      accessibilityLabel={t("appUpdateReady")}
-    >
-      <Text style={[s.updatePillText, { color: "#15803d" }]}>✓ {t("appUpdateReady")}</Text>
-    </Pressable>
+    <Animated.View style={[s.updatePill, { opacity: fade }]} pointerEvents="none">
+      <Animated.Text style={[s.updatePillDiamond, { transform: [{ rotate }] }]}>◆</Animated.Text>
+      <Text style={s.updatePillText}>{t("appLoading")}</Text>
+    </Animated.View>
   );
 }
 
@@ -188,8 +183,9 @@ export default function App() {
   useEffect(() => onSyncActivity(() => setTick((x) => x + 1)), []);
 
   // Web: watch the service worker so an APP-VERSION download is visible in
-  // real time (AppUpdatePill). Also nudge an update check on launch.
-  const [appUpdate, setAppUpdate] = useState(null); // null | "downloading" | "ready"
+  // real time (AppUpdatePill). When the new build is ready the pill fades and
+  // the app reloads itself into it. Also nudge an update check on launch.
+  const [appUpdate, setAppUpdate] = useState(null); // null | "downloading" | "done"
   useEffect(() => {
     if (Platform.OS !== "web" || typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
     let cancelled = false;
@@ -197,11 +193,12 @@ export default function App() {
       if (!w || cancelled) return;
       // No controller = very first install on a fresh page: the page IS the
       // new build already, nothing to announce.
-      if (navigator.serviceWorker.controller) setAppUpdate("downloading");
+      if (!navigator.serviceWorker.controller) return;
+      setAppUpdate("downloading");
       w.addEventListener("statechange", () => {
         if (cancelled) return;
         if (w.state === "installed" || w.state === "activated") {
-          setAppUpdate(navigator.serviceWorker.controller ? "ready" : null);
+          setAppUpdate("done"); // pill fades out, then onFaded reloads
         } else if (w.state === "redundant") {
           setAppUpdate(null);
         }
@@ -389,7 +386,11 @@ export default function App() {
             onJoin={() => { setDrawerOpen(false); setScreen("joinlist"); }}
           />
         )}
-        <AppUpdatePill state={appUpdate} t={t} />
+        <AppUpdatePill
+          state={appUpdate}
+          t={t}
+          onFaded={() => { try { window.location.reload(); } catch { /* native never gets here */ } }}
+        />
       </View>
       {!splashDone && <LaunchSplash dock={dock} onDone={() => setSplashDone(true)} />}
     </SafeAreaView>
@@ -435,7 +436,6 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
   },
-  updatePillReady: { borderColor: "#15803d55", backgroundColor: "#f2f8f4" },
   updatePillDiamond: { color: colors.accent, fontSize: 13, lineHeight: 15 },
   updatePillText: { fontFamily: fonts.body, fontSize: 12.5, fontWeight: "700", color: colors.accent },
   mark: { color: colors.accent, fontSize: 20 },
