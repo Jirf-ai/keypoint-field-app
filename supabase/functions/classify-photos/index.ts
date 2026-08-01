@@ -26,7 +26,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
   if (req.method !== "POST") return new Response("POST only", { status: 405, headers: CORS_HEADERS });
 
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  // `claude` is the name the Anthropic key has carried on this project since
+  // before this function existed; accept it so the classifier runs either way.
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY") ?? Deno.env.get("claude");
   if (!apiKey) return json({ error: "ANTHROPIC_API_KEY secret not set on this project" }, 500);
 
   let body: Record<string, unknown> = {};
