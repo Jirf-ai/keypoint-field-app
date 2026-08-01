@@ -27,8 +27,9 @@ const CORS_HEADERS = {
 //            photo's incident_id FK resolves in the same round],
 //   clock_events?: [day-clock start/end stamps; client `worker` → worker_name],
 //   photos?: [{ ...meta, b64? }] — b64 (data URI or raw base64) uploads to the
-//            'field-photos' bucket at {project_id}/{filename}; metadata-only
-//            rows sync with storage_path null and can re-send b64 later,
+//            'field-photos' bucket at {project_id}/{photo_id}-{filename};
+//            metadata-only rows sync with storage_path null and can re-send
+//            b64 later,
 //   change_orders?: [co rows]
 // }
 // Response: { synced: {days,items,labor,incidents,photos,change_orders}, failed: [{kind,id,error}] }
@@ -210,7 +211,12 @@ Deno.serve(async (req) => {
         const b64 = b64raw.includes(",") ? b64raw.slice(b64raw.indexOf(",") + 1) : b64raw;
         if (b64.length > 16_000_000) throw new Error("photo over ~12MB — recapture at lower quality");
         const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-        const path = `${project_id}/${str(r.filename) || `${id}.jpg`}`;
+        // Path is keyed on photo_id: filenames are per-device sequential
+        // (1257-INS-20260731-001.jpg), so two phones on the same project/day
+        // generate identical names and upsert would overwrite each other's
+        // pixels (lost the 07-31 pilot receipts). photo_id is client-unique
+        // and stable across re-sends, so retries still land on their own path.
+        const path = `${project_id}/${id}-${str(r.filename) || "photo.jpg"}`;
         const { error: upErr } = await supabase.storage
           .from("field-photos")
           .upload(path, bin, { contentType: "image/jpeg", upsert: true });
