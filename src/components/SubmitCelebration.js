@@ -8,7 +8,9 @@ import { Animated, Dimensions, Easing, StyleSheet, Text } from "react-native";
 import { colors, fonts } from "../theme";
 import { buzz } from "../util";
 
-export default function SubmitCelebration({ t, onDone }) {
+// `shout` overrides the landing text — End Day reuses the same send-off with
+// "Day sent successfully" (Jeffrey 2026-08-01); default stays the submit copy.
+export default function SubmitCelebration({ t, onDone, shout }) {
   const spin = useRef(new Animated.Value(0)).current; // rotations while winding up
   const lift = useRef(new Animated.Value(0)).current; // 0 → 1 = launched off-screen
   const check = useRef(new Animated.Value(0)).current; // checkmark spring scale
@@ -49,7 +51,7 @@ export default function SubmitCelebration({ t, onDone }) {
       ) : (
         <Animated.View style={[s.checkWrap, { transform: [{ scale: check }], opacity: check }]}>
           <Text style={s.check}>✓</Text>
-          <Text style={s.shout}>{t("submittedShout")}</Text>
+          <Text style={s.shout}>{shout ?? t("submittedShout")}</Text>
         </Animated.View>
       )}
     </Animated.View>

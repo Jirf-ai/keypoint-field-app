@@ -8,11 +8,12 @@
 // write through addLine, so V-checks and the sync spine are untouched.
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import SubmitCelebration from "../components/SubmitCelebration";
 import { Card, EmptyState, FormScreen, GroupLabel, MathStrip, NoticeCard, NumericField, PHASE_ORDER, PickerRow, StickyFooter, TRADE_ORDER } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { computeClockHours, TRADES, todayStr, validateLabor } from "../schema";
 import { activeProfile, addLine, clockEnd, currentAreas, getSettings, openClock } from "../store";
-import { timeStr } from "../util";
+import { buzz, timeStr } from "../util";
 import { colors, fonts, type } from "../theme";
 
 
@@ -32,6 +33,7 @@ export default function EndDayScreen({ t, lang, onDone }) {
   const [rate, setRate] = useState(st.lastRate ?? "");
   const [errors, setErrors] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
 
   // Only reachable from a running clock; a stale navigation just shows empty.
   if (!start) return <EmptyState body={t("noEntriesToday")} style={{ marginTop: 14 }} />;
@@ -64,7 +66,12 @@ export default function EndDayScreen({ t, lang, onDone }) {
       };
       const blocks = validateLabor(base);
       if (blocks.length) {
+        // The tap must never look dead (pilot 2026-08-01: a crew member with
+        // rate/phase/area unset saw "no response" and walked away — the error
+        // card rendered below the fold). Errors now pin above the footer
+        // buttons, and the buzz says "the tap landed, look at the screen".
         setErrors(blocks);
+        buzz(30);
         return;
       }
       setSaving(true);
@@ -75,19 +82,34 @@ export default function EndDayScreen({ t, lang, onDone }) {
       setSaving(true);
       await clockEnd(start);
     }
-    onDone();
+    // The record is committed locally (sync rides behind) — the day earned its
+    // send-off: diamond spins up, launches, "Day sent successfully".
+    setCelebrating(true);
   }
 
   return (
+    <View style={{ flex: 1 }}>
     <FormScreen
       footer={
-        <StickyFooter
-          cancelLabel={t("keepWorking")}
-          onCancel={onDone}
-          primaryLabel={t("endDay")}
-          onPrimary={save}
-          disabled={saving}
-        />
+        <View>
+          {errors.length > 0 && (
+            // Pinned HERE, above the buttons, so a blocked save is impossible
+            // to miss — the inline card at the bottom of the scroll content
+            // was invisible unless the worker happened to be scrolled there.
+            <NoticeCard tone="error" title={t("needFix")} style={s.footerNotice}>
+              {errors.map((e) => (
+                <Text key={e} style={s.errItem}>• {t(FIX_KEYS[e] ?? e)}</Text>
+              ))}
+            </NoticeCard>
+          )}
+          <StickyFooter
+            cancelLabel={t("keepWorking")}
+            onCancel={onDone}
+            primaryLabel={t("endDay")}
+            onPrimary={save}
+            disabled={saving}
+          />
+        </View>
       }
     >
       {closingEarlierDay && (
@@ -188,16 +210,10 @@ export default function EndDayScreen({ t, lang, onDone }) {
         </NoticeCard>
       )}
 
-      {errors.length > 0 && (
-        <NoticeCard tone="error" title={t("needFix")}>
-          {errors.map((e) => (
-            <Text key={e} style={s.errItem}>• {t(FIX_KEYS[e] ?? e)}</Text>
-          ))}
-        </NoticeCard>
-      )}
-
       {c.hours > 0 && <Text style={s.footNote}>{t("recordedFromClock")}</Text>}
     </FormScreen>
+    {celebrating && <SubmitCelebration t={t} shout={t("daySentShout")} onDone={onDone} />}
+    </View>
   );
 }
 
@@ -232,4 +248,5 @@ const s = StyleSheet.create({
   footNote: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, textAlign: "center", marginTop: 2, marginHorizontal: 24 },
   warnText: { fontFamily: fonts.body, color: colors.amber, fontSize: 13.5, fontWeight: "600", lineHeight: 19 },
   errItem: { fontFamily: fonts.body, color: colors.red, fontSize: 14, lineHeight: 21 },
+  footerNotice: { marginHorizontal: 16, marginBottom: 0 },
 });

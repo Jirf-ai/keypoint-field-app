@@ -119,9 +119,12 @@ Deno.serve(async (req) => {
       log_id: logIds.get(str(r.work_date)) ?? null,
       project_id,
       worker_name: r.worker_name ?? r.worker ?? null,
+      // clock_id = End Day provenance: this line was computed FROM the day
+      // clock, not typed (column added 2026-08-01 — the whitelist silently
+      // dropped it before, so clock-sourced hours looked hand-typed).
       ...pick(r, ["work_date", "trade", "worker_id", "phase", "area", "hours", "hour_type",
         "hourly_rate", "co_ref", "recorded_by", "recorded_at", "captured_offline",
-        "version", "supersedes", "note"]),
+        "version", "supersedes", "note", "clock_id"]),
       synced_at: now,
     };
     const { error } = await supabase.from("field_labor_entries").upsert(row, { onConflict: "labor_id", ignoreDuplicates: true });
