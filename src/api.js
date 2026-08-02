@@ -4,18 +4,29 @@ const BASE = "https://bbkeogzyqwszmijmvlmj.supabase.co/functions/v1";
 const ANON =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJia2VvZ3p5cXdzem1pam12bG1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MDgzMjYsImV4cCI6MjA5ODE4NDMyNn0.hfaZ4zhZbUAKvN9KKmSRCrts1H-atv1Yg1CTEpcSeh4";
 
-export async function call(fn, body) {
-  const res = await fetch(`${BASE}/${fn}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${ANON}`,
-      apikey: ANON,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, ...json };
+// timeoutMs: a site-cellular request that hangs (no response, no error) used
+// to wedge the single-flight sync queue FOREVER — every later trigger no-oped
+// until the app was killed. Abort instead; the caller treats it like any
+// network failure and the rows ride the next sync.
+export async function call(fn, body, { timeoutMs = 25_000 } = {}) {
+  const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : null;
+  try {
+    const res = await fetch(`${BASE}/${fn}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ANON}`,
+        apikey: ANON,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      ...(ctl ? { signal: ctl.signal } : {}),
+    });
+    const json = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, ...json };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // Project typeahead against the Records engine. Primary: search-projects
