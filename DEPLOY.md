@@ -14,6 +14,16 @@ Actions): `CLOUDFLARE_API_TOKEN` (a Cloudflare API token with Pages edit
 permission) and `CLOUDFLARE_ACCOUNT_ID`. Without them the workflow fails
 fast with an error naming this fix — nothing deploys.
 
+> ⚠️ **As of 2026-08-01 CI has NEVER succeeded (13/13 runs failed).** Both
+> secrets are set, but wrangler reports *"The Pages project keypoint-field
+> does not exist"* for the account the secrets point at. The project lives
+> under account **`5ef946c1cc3eba5892b3da3a945c45cf`**
+> (Liaojeff630@gmail.com's Account — `npx wrangler whoami`). Fix: set
+> `CLOUDFLARE_ACCOUNT_ID` to that value, and make sure
+> `CLOUDFLARE_API_TOKEN` was minted **from that same account** with Pages
+> edit permission, then re-run the failed workflow. Until then, every
+> deploy is the manual path below.
+
 ## Manual deploy (fallback / emergency)
 
 The pre-CI flow still works from any machine with wrangler auth:
