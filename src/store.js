@@ -52,6 +52,10 @@ const EMPTY = {
   owned_projects: [],         // { id, name, address, status, owner_id, created_at }
   lines: [],          // items + labor, append-only ({kind: 'item'|'labor'})
   photos: [],
+  // Batch-capture crash net (2026-08-01): picked-but-not-yet-uploaded photos.
+  // Survive a force-quit / page reload; discarded on any NORMAL exit from the
+  // photo screen, so the visible Upload-commits contract is unchanged.
+  photo_drafts: [],   // { draft_id, work_date, project_id, uri, picked_at }
   change_orders: [],
   incidents: [],      // SF-02 safety records — any role, append-only
   // Start Day / End Day (2026-07-31): append-only clock events, the worker's
@@ -82,6 +86,13 @@ export async function load() {
   }
   applyProfileContext();
   await hydratePixels();
+  // WEB: ask the browser to mark this origin's storage PERSISTENT — a pilot
+  // phone filling up with other apps' data must not evict our blob + pixel
+  // vault (eviction is the "app reset" behind the timer/photo losses).
+  // Chrome grants silently for installed PWAs; best-effort everywhere else.
+  if (Platform.OS === "web" && typeof navigator !== "undefined") {
+    try { navigator.storage?.persist?.().catch(() => {}); } catch { /* old browser */ }
+  }
   return state;
 }
 
@@ -91,16 +102,21 @@ export async function load() {
 // lost record (the metadata row survives, and the server may hold the binary).
 async function hydratePixels() {
   if (Platform.OS !== "web") return;
-  for (const p of state.photos) {
+  // Drafts ride the same vault, keyed by draft_id.
+  const rows = [
+    ...state.photos.map((p) => [p, p.photo_id]),
+    ...(state.photo_drafts ?? []).map((d) => [d, d.draft_id]),
+  ];
+  for (const [p, id] of rows) {
     if (typeof p.uri !== "string") continue;
     if (p.uri.startsWith(IDB_PREFIX)) {
-      const pix = await getPixels(p.photo_id);
+      const pix = await getPixels(id);
       if (pix) {
         p.uri = pix;
-        pixelsInIdb.add(p.photo_id);
+        pixelsInIdb.add(id);
       }
     } else if (p.uri.startsWith("data:image")) {
-      if (await putPixels(p.photo_id, p.uri)) pixelsInIdb.add(p.photo_id);
+      if (await putPixels(id, p.uri)) pixelsInIdb.add(id);
     }
   }
 }
@@ -109,13 +125,14 @@ async function hydratePixels() {
 // in the vault. Profile selfies stay inline on purpose (small, identity).
 function blobSnapshot() {
   if (Platform.OS !== "web") return state;
+  const sentinel = (row, id) =>
+    pixelsInIdb.has(id) && typeof row.uri === "string" && row.uri.startsWith("data:image")
+      ? { ...row, uri: IDB_PREFIX + id }
+      : row;
   return {
     ...state,
-    photos: state.photos.map((p) =>
-      pixelsInIdb.has(p.photo_id) && typeof p.uri === "string" && p.uri.startsWith("data:image")
-        ? { ...p, uri: IDB_PREFIX + p.photo_id }
-        : p
-    ),
+    photos: state.photos.map((p) => sentinel(p, p.photo_id)),
+    photo_drafts: (state.photo_drafts ?? []).map((d) => sentinel(d, d.draft_id)),
   };
 }
 
@@ -177,18 +194,23 @@ if (Platform.OS === "web" && typeof window !== "undefined") {
 
 async function shedPhotoWeight() {
   let changed = false;
-  for (const p of state.photos) {
+  // Drafts count as unsynced (they're the only copy in existence).
+  const rows = [
+    ...state.photos.map((p) => [p, p.photo_id, !!p.synced_at]),
+    ...(state.photo_drafts ?? []).map((d) => [d, d.draft_id, false]),
+  ];
+  for (const [p, id, synced] of rows) {
     if (typeof p.uri !== "string" || !p.uri.startsWith("data:image")) continue;
     // Synced → a thumbnail is all the phone still owes the user. Unsynced →
     // the binary is still the only copy in existence; shrink, never drop.
-    const smaller = p.synced_at
+    const smaller = synced
       ? await shrinkDataUri(p.uri, 320, 0.5)
       : await shrinkDataUri(p.uri, 1024, 0.55);
     if (smaller) {
       p.uri = smaller;
       changed = true;
       // Keep the vault copy in step with the shrunk in-memory copy.
-      if (pixelsInIdb.has(p.photo_id)) await putPixels(p.photo_id, smaller);
+      if (pixelsInIdb.has(id)) await putPixels(id, smaller);
     }
   }
   return changed;
@@ -595,6 +617,123 @@ export async function linkPhoto(photo_id, line_id) {
     await persist();
   }
   return p;
+}
+
+// ---------------------------------------------------------- photo drafts
+// Crash net for batch capture (2026-08-01): picked photos used to live only
+// in component state until the explicit Upload tap — answering a call could
+// reload the PWA and eat the whole batch. Drafts persist the picked pixels
+// immediately; the photo screen restores them on its next mount. The visible
+// contract is UNCHANGED: Upload commits, ✕ / Cancel / leaving the screen
+// discards (the screen clears drafts on unmount) — only an unexpected death
+// (force-quit, reload, eviction) leaves them behind to be recovered.
+export async function addPhotoDrafts(work_date, uris) {
+  const rows = [];
+  for (const uri of uris) {
+    const d = {
+      draft_id: uuid(),
+      work_date,
+      project_id: state.current_project?.id ?? null,
+      uri,
+      picked_at: new Date().toISOString(),
+    };
+    if (Platform.OS === "web" && typeof uri === "string" && uri.startsWith("data:image")) {
+      if (await putPixels(d.draft_id, uri)) pixelsInIdb.add(d.draft_id);
+    }
+    rows.push(d);
+  }
+  state.photo_drafts = [...(state.photo_drafts ?? []), ...rows];
+  await persist();
+  return rows;
+}
+
+export function photoDrafts(work_date) {
+  const pid = state?.current_project?.id ?? null;
+  return (state?.photo_drafts ?? []).filter((d) => d.work_date === work_date && d.project_id === pid);
+}
+
+export async function removePhotoDraft(draft_id) {
+  state.photo_drafts = (state.photo_drafts ?? []).filter((d) => d.draft_id !== draft_id);
+  pixelsInIdb.delete(draft_id);
+  await deletePixels(draft_id);
+  await persist();
+}
+
+export async function clearPhotoDrafts(work_date) {
+  const pid = state?.current_project?.id ?? null;
+  const gone = (state?.photo_drafts ?? []).filter((d) => d.work_date === work_date && d.project_id === pid);
+  if (!gone.length) return;
+  const goneIds = new Set(gone.map((d) => d.draft_id));
+  state.photo_drafts = state.photo_drafts.filter((d) => !goneIds.has(d.draft_id));
+  for (const id of goneIds) {
+    pixelsInIdb.delete(id);
+    await deletePixels(id);
+  }
+  await persist();
+}
+
+// ------------------------------------------------------- multi-context merge
+// WEB: an installed PWA and a browser tab (Android Chrome shares profile
+// storage) both hold this blob IN MEMORY and write it whole — the last writer
+// used to clobber rows the other context appended. The `storage` event fires
+// here whenever ANOTHER context writes the key: adopt every append-only row
+// we don't have (ids are client UUIDs, so a union is always safe) plus any
+// sync/supersede/tombstone stamps we're missing; our next persist then
+// carries both sides. Never deletes, never overwrites newer with older.
+export async function mergeExternalState(ext) {
+  if (!state || !ext || typeof ext !== "object") return false;
+  let changed = false;
+  const unions = [
+    ["lines", "line_id"],
+    ["photos", "photo_id"],
+    ["photo_drafts", "draft_id"],
+    ["change_orders", "co_id"],
+    ["incidents", "incident_id"],
+    ["clock_events", "clock_id"],
+    ["profiles", "worker_id"],
+  ];
+  for (const [key, idKey] of unions) {
+    const theirs = Array.isArray(ext[key]) ? ext[key] : [];
+    if (!theirs.length) continue;
+    const ours = state[key] ?? (state[key] = []);
+    const byId = new Map(ours.map((r) => [r[idKey], r]));
+    for (const row of theirs) {
+      const id = row?.[idKey];
+      if (!id) continue;
+      const mine = byId.get(id);
+      if (!mine) {
+        ours.push(row);
+        byId.set(id, row);
+        changed = true;
+        continue;
+      }
+      // Same row on both sides: adopt one-way stamps we're missing.
+      if (!mine.synced_at && row.synced_at) { mine.synced_at = row.synced_at; changed = true; }
+      if (!mine.superseded_by && row.superseded_by) { mine.superseded_by = row.superseded_by; changed = true; }
+      if (row.deleted && !mine.deleted) { mine.deleted = true; mine.uri = null; mine.line_id = null; changed = true; }
+    }
+  }
+  // Day statuses: adopt entries we lack; a submit beats our lingering draft.
+  for (const [k, day] of Object.entries(ext.days ?? {})) {
+    const mine = state.days[k];
+    if (!mine) { state.days[k] = day; changed = true; }
+    else if (mine.status === "draft" && day?.status && day.status !== "draft") { state.days[k] = day; changed = true; }
+  }
+  if (changed) await persist();
+  return changed;
+}
+
+if (Platform.OS === "web" && typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key !== KEY || !e.newValue || !state) return;
+    try {
+      mergeExternalState(JSON.parse(e.newValue)).then((changed) => {
+        // Adopted photos may carry idb: sentinels — the vault is shared, so
+        // hydrate them into real pixels for thumbnails and sync.
+        if (changed) hydratePixels();
+      });
+    } catch { /* a torn write parses as garbage — our copy stands */ }
+  });
 }
 
 // ------------------------------------------------------------------ day clock

@@ -221,6 +221,14 @@ export default function App() {
   // real time (AppUpdatePill). When the new build is ready the pill fades and
   // the app reloads itself into it. Also nudge an update check on launch.
   const [appUpdate, setAppUpdate] = useState(null); // null | "downloading" | "done"
+  // Never reload out from under a mid-capture form — a self-reload wipes
+  // typed-but-unsaved work (Jeffrey 2026-08-01: other phone activity must not
+  // hurt capture). The update applies the moment the worker is back on Today.
+  const [reloadWhenIdle, setReloadWhenIdle] = useState(false);
+  useEffect(() => {
+    if (!reloadWhenIdle || screen !== "today") return;
+    try { window.location.reload(); } catch { /* native never gets here */ }
+  }, [reloadWhenIdle, screen]);
   useEffect(() => {
     if (Platform.OS !== "web" || typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
     let cancelled = false;
@@ -424,7 +432,7 @@ export default function App() {
         <AppUpdatePill
           state={appUpdate}
           t={t}
-          onFaded={() => { try { window.location.reload(); } catch { /* native never gets here */ } }}
+          onFaded={() => setReloadWhenIdle(true)} // reloads now if on Today, else when back
         />
         {welcomeName != null && (
           <WelcomeBack t={t} name={welcomeName} onDone={() => setWelcomeName(null)} />

@@ -2,7 +2,7 @@
 // one big orange block. Shoot first, tag after. Nothing persists until the
 // explicit Upload confirmation; each photo is organized server-side by project,
 // line, who shot it, and time (schema §4.5).
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { File, Paths } from "expo-file-system";
@@ -11,14 +11,21 @@ import { Btn, Card, ChipWall, Field, FormScreen, GroupLabel, PHASE_ORDER, Picker
 import { phaseLabel } from "../i18n";
 import { photoFilename } from "../schema";
 import { parseProject } from "../components/ProjectPicker";
-import { activeLines, addPhoto, currentAreas, currentProject, getSettings, nextPhotoSeq } from "../store";
+import { activeLines, addPhoto, addPhotoDrafts, clearPhotoDrafts, currentAreas, currentProject, getSettings, nextPhotoSeq, photoDrafts, removePhotoDraft } from "../store";
 import { durablePhotoUri } from "../util";
 import { colors, fonts, type } from "../theme";
 
 
 export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
   const st = getSettings();
-  const [assets, setAssets] = useState([]); // pending, NOT saved yet
+  // Pending batch. Seeded from crash-net drafts: if the app died mid-review
+  // (call, force-quit, page reload) the picked photos come RIGHT BACK here.
+  // Every normal exit clears the drafts (unmount below), so Upload-commits /
+  // Cancel-discards behaves exactly as it always has.
+  const [assets, setAssets] = useState(() =>
+    photoDrafts(workDate).map((d) => ({ uri: d.uri, draft_id: d.draft_id }))
+  );
+  useEffect(() => () => { clearPhotoDrafts(workDate); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [caption, setCaption] = useState("");
   // Work vs receipt (2026-07-31): one tap separates jobsite evidence from the
   // paper trail. Applies to the whole batch — crews don't mix receipts and
@@ -44,7 +51,16 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
         res = await ImagePicker.launchImageLibraryAsync({ quality: 0.6, allowsMultipleSelection: true, selectionLimit: 12 });
       }
       if (!res.canceled && res.assets?.length) {
-        setAssets((prev) => [...prev, ...res.assets.map((a) => ({ uri: a.uri }))]);
+        // Pin pixels + stash drafts NOW, not at Upload — a phone call or app
+        // switch can reload the PWA before the confirm tap, and the batch
+        // must survive it (Jeffrey 2026-08-01). durablePhotoUri is a no-op
+        // on already-durable uris and on native.
+        const uris = [];
+        for (const a of res.assets) {
+          uris.push(Platform.OS === "web" ? await durablePhotoUri(a.uri) : a.uri);
+        }
+        const rows = await addPhotoDrafts(workDate, uris);
+        setAssets((prev) => [...prev, ...rows.map((d) => ({ uri: d.uri, draft_id: d.draft_id }))]);
       }
     } catch (e) {
       setErr(String(e?.message ?? e));
@@ -52,6 +68,8 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
   }
 
   function removeAt(i) {
+    const gone = assets[i];
+    if (gone?.draft_id) removePhotoDraft(gone.draft_id); // fire-and-forget
     setAssets((prev) => prev.filter((_, idx) => idx !== i));
   }
 
@@ -92,6 +110,7 @@ export default function AddPhotoScreen({ t, lang, workDate, onDone }) {
         ...(gps ?? {}),
       });
     }
+    await clearPhotoDrafts(workDate); // committed — the crash net is done with them
     onDone();
   }
 

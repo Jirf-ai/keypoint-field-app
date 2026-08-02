@@ -6,6 +6,9 @@ jest.mock("../src/location", () => ({
   lastLocation: () => null,
   refreshLocation: async () => null,
 }));
+// Store fires real fire-and-forget calls (remember-project) — tests must
+// never hit the live server, and dangling fetches leak jest workers.
+jest.mock("../src/api", () => ({ call: jest.fn(async () => ({ ok: false, status: 0 })) }));
 
 const TODAY = (() => {
   const d = new Date();
@@ -137,6 +140,52 @@ describe("day clock", () => {
     const pair = store.clockFor(TODAY);
     expect(pair.start.clock_id).toBe("s1");
     expect(pair.end.clock_id).toBe("e1");
+  });
+});
+
+describe("photo-draft crash net", () => {
+  test("drafts persist at pick, scope to project+date, and clear on demand", async () => {
+    const [d] = await store.addPhotoDrafts(TODAY, ["data:image/jpeg;base64,AAA"]);
+    expect(store.photoDrafts(TODAY).map((x) => x.draft_id)).toEqual([d.draft_id]);
+    // Another project's photo screen must not see them.
+    await store.setCurrentProject({ id: "p2", name: "456 Other Ave" });
+    expect(store.photoDrafts(TODAY)).toHaveLength(0);
+    await store.setCurrentProject({ id: "p1", name: "123 Test St" });
+    // ✕ on a thumbnail removes just that draft.
+    await store.removePhotoDraft(d.draft_id);
+    expect(store.photoDrafts(TODAY)).toHaveLength(0);
+    // Upload / Cancel / leaving the screen clears the whole batch.
+    await store.addPhotoDrafts(TODAY, ["u1", "u2"]);
+    await store.clearPhotoDrafts(TODAY);
+    expect(store.photoDrafts(TODAY)).toHaveLength(0);
+    // Drafts never reach the sync queue.
+    expect(store.pendingCount()).toBe(0);
+  });
+});
+
+describe("multi-context union merge", () => {
+  test("adopts another tab's rows and stamps, never duplicates or deletes", async () => {
+    const mine = await store.addLine(LABOR);
+    const dayKey = `p1:${TODAY}`;
+    const ext = {
+      lines: [
+        // Same row, but the other tab already synced it — adopt the stamp.
+        { ...mine, synced_at: "2026-08-01T10:00:00Z" },
+        // A row we've never seen — adopt it whole.
+        { ...LABOR, line_id: "ext-line-1", project_id: "p1", worker: "Ben", recorded_at: "2026-08-01T09:00:00Z", version: 1, supersedes: null, synced_at: null },
+      ],
+      clock_events: [
+        { clock_id: "ext-clock-1", event: "start", work_date: TODAY, worker_id: "w-ext", at: "2026-08-01T14:00:00Z", project_id: "p1" },
+      ],
+      days: { [dayKey]: { status: "submitted", submitted_at: "2026-08-01T23:00:00Z", submitted_by: "Ana" } },
+    };
+    expect(await store.mergeExternalState(ext)).toBe(true);
+    expect(store.activeLines(TODAY)).toHaveLength(2);
+    expect(mine.synced_at).toBe("2026-08-01T10:00:00Z");
+    expect(store.dayStatus(TODAY)).toBe("submitted");
+    // Idempotent — a second delivery of the same blob changes nothing.
+    expect(await store.mergeExternalState(ext)).toBe(false);
+    expect(store.activeLines(TODAY)).toHaveLength(2);
   });
 });
 
