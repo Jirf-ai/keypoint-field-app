@@ -35,6 +35,12 @@ export default function EndDayScreen({ t, lang, onDone }) {
   const [saving, setSaving] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
 
+  // MUST come before the no-clock empty state: clockEnd() nulls the open
+  // clock, so on the post-save re-render `start` is already gone — checking
+  // !start first stranded the worker on an empty END DAY screen with no
+  // send-off and no navigation (caught by the 2026-08-02 live walkthrough).
+  if (celebrating) return <SubmitCelebration t={t} shout={t("daySentShout")} onDone={onDone} />;
+
   // Only reachable from a running clock; a stale navigation just shows empty.
   if (!start) return <EmptyState body={t("noEntriesToday")} style={{ marginTop: 14 }} />;
 
@@ -212,7 +218,6 @@ export default function EndDayScreen({ t, lang, onDone }) {
 
       {c.hours > 0 && <Text style={s.footNote}>{t("recordedFromClock")}</Text>}
     </FormScreen>
-    {celebrating && <SubmitCelebration t={t} shout={t("daySentShout")} onDone={onDone} />}
     </View>
   );
 }
