@@ -12,9 +12,14 @@ const CORS_HEADERS = {
 //   1. back-fill field_photos.photo_kind where the crew didn't tag (NULL),
 //   2. read receipts — vendor, total, invoice # — into the receipt_* columns
 //      (v2), so the SM's item form can prefill the paper trail.
-// Crew-set photo_kind is never overwritten; crew-tagged receipts still get
-// the extraction pass (queued until receipt_scanned_at is stamped — stamped
-// even when nothing was readable, so unreadable receipts leave the queue).
+// v3 (2026-08-02): photos tagged 'work' get ONE vision pass too. The app's
+// batch form DEFAULTS the whole batch to 'work', so a receipt shot without
+// flipping the toggle synced as 'work' and was permanently invisible here —
+// 2 of 2 real receipts on pilot day 2 (Home Depot $223.97, Jollibee $49.37)
+// fell into exactly that hole. A 'work' photo the model confidently reads as
+// a receipt flips to receipt + extraction; otherwise receipt_scanned_at is
+// stamped as "checked" so every photo leaves the queue after one pass.
+// A crew-set 'receipt' tag is still never overwritten.
 //
 // Body: { limit?: number (default 10, max 25) }
 // Response: { classified: [{photo_id, photo_kind, vendor?, total?, invoice?}],
@@ -43,7 +48,7 @@ Deno.serve(async (req) => {
   );
   const anthropic = new Anthropic({ apiKey });
 
-  const QUEUE = "photo_kind.is.null,and(photo_kind.eq.receipt,receipt_scanned_at.is.null)";
+  const QUEUE = "photo_kind.is.null,and(photo_kind.eq.receipt,receipt_scanned_at.is.null),and(photo_kind.eq.work,receipt_scanned_at.is.null)";
   const { data: photos, error: qErr } = await supabase
     .from("field_photos")
     .select("photo_id, storage_path, photo_kind")
@@ -115,16 +120,19 @@ Deno.serve(async (req) => {
         skipped.push({ photo_id: p.photo_id, reason: "no classification in response" });
         continue;
       }
-      // Crew tag wins: an already-tagged receipt keeps its kind; extraction
-      // uses the crew's tag, not the model's, to decide what to write.
-      const kind = p.photo_kind ?? out.kind;
-      const patch: Record<string, unknown> = {};
-      if (p.photo_kind === null) patch.photo_kind = out.kind;
+      // A crew-set 'receipt' keeps its kind. A 'work' tag is usually just the
+      // batch default, so a confident receipt read FLIPS it (v3) — a receipt
+      // recorded as jobsite evidence is silent cost loss. Every scanned photo
+      // gets receipt_scanned_at stamped so it exits the queue after one pass.
+      const kind = p.photo_kind === "receipt" ? "receipt" : out.kind;
+      const patch: Record<string, unknown> = { receipt_scanned_at: new Date().toISOString() };
+      if (p.photo_kind === null || (p.photo_kind === "work" && out.kind === "receipt")) {
+        patch.photo_kind = out.kind;
+      }
       if (kind === "receipt") {
         patch.receipt_vendor = out.vendor.trim() || null;
         patch.receipt_total = out.total > 0 ? out.total : null;
         patch.receipt_invoice = out.invoice.trim() || null;
-        patch.receipt_scanned_at = new Date().toISOString();
       }
       let q = supabase.from("field_photos").update(patch).eq("photo_id", p.photo_id);
       // Never overwrite a crew tag that raced in while we were classifying.
