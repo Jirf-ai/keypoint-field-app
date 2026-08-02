@@ -31,6 +31,13 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 //   my-projects { worker_id }
 //     → { ok, projects: [ { id, name, status, last_used } ] }
 //       Most-recent first. The restore path reseeds the drawer from this.
+//   my-clock-events { worker_id }
+//     → { ok, events: [ { clock_id, project_id, project_name, work_date,
+//        event, starts, worker_id, worker_name, at, recorded_by, recorded_at } ] }
+//       The worker's day-clock stamps from the last 7 days (server truth,
+//       field_clock_events). The client merges these on launch and after a
+//       phone restore so a wiped device does NOT reset a running punch-in —
+//       the timer resumes from the original start stamp (Jeffrey 2026-08-01).
 //
 // Real SMS is a flip: set TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM secrets and the
 // code is texted instead of returned. Codes are hashed at rest and expire.
@@ -254,5 +261,27 @@ Deno.serve(async (req) => {
     return json({ ok: true, projects });
   }
 
-  return json({ error: "action must be send-otp | verify-otp | roster | remember-project | my-projects" }, 400);
+  if (action === "my-clock-events") {
+    const worker_id = String(body.worker_id ?? "").trim();
+    if (!worker_id) return json({ ok: false, error: "worker_id is required" }, 400);
+    // 7-day window: covers any storage-loss + restore gap; a start left open
+    // longer than that is the overdue flow's problem, not rehydration's.
+    const since = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+    const { data: evs, error } = await supabase.from("field_clock_events")
+      .select("clock_id, project_id, work_date, event, starts, worker_id, worker_name, at, recorded_by, recorded_at")
+      .eq("worker_id", worker_id)
+      .gte("work_date", since)
+      .order("at", { ascending: true });
+    if (error) return json({ ok: false, error: error.message }, 500);
+    const pids = [...new Set((evs ?? []).map((e) => e.project_id).filter(Boolean))];
+    const names: Record<string, string> = {};
+    if (pids.length) {
+      const { data: ps } = await supabase.from("projects").select("id, name").in("id", pids);
+      for (const p of ps ?? []) names[p.id] = p.name;
+    }
+    const events = (evs ?? []).map((e) => ({ ...e, project_name: e.project_id ? names[e.project_id] ?? null : null }));
+    return json({ ok: true, events });
+  }
+
+  return json({ error: "action must be send-otp | verify-otp | roster | remember-project | my-projects | my-clock-events" }, 400);
 });

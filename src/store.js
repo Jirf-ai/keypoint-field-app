@@ -155,6 +155,26 @@ async function doPersist() {
   }
 }
 
+// WEB: the debounced write above trades 250ms of exposure for a smooth UI —
+// but a tap followed immediately by pocketing the phone (punch-in, lock) can
+// kill the tab before the timeout fires, and the write is gone. Flush the
+// pending write the moment the page hides; pagehide + visibilitychange cover
+// lock screen, tab switch, and home button.
+if (Platform.OS === "web" && typeof window !== "undefined") {
+  const flush = () => {
+    if (!persist._t) return;
+    clearTimeout(persist._t);
+    persist._t = null;
+    doPersist();
+  };
+  window.addEventListener("pagehide", flush);
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flush();
+    });
+  }
+}
+
 async function shedPhotoWeight() {
   let changed = false;
   for (const p of state.photos) {
@@ -630,6 +650,56 @@ export function openClock() {
   const open = evs.filter((e) => e.event === "start" && !closed.has(e.clock_id));
   open.sort((a, b) => (a.at < b.at ? -1 : 1));
   return open[0] ?? null;
+}
+
+// Server → device rehydration (2026-08-01): a wiped/evicted device loses
+// clock_events with the rest of the blob, so a worker who logged back in saw
+// their running punch-in "reset" — while the server (field_clock_events) still
+// held the open start. Merge the server's stamps back in: dedupe on clock_id,
+// and arrivals are stamped synced (they ARE the server copy — they must never
+// re-enter the pending queue). The timer resumes from the original `at`.
+export async function mergeClockEvents(rows) {
+  const evs = state.clock_events ?? (state.clock_events = []);
+  const have = new Set(evs.map((e) => e.clock_id));
+  let added = 0;
+  for (const r of rows ?? []) {
+    if (!r?.clock_id || have.has(r.clock_id)) continue;
+    if (r.event !== "start" && r.event !== "end") continue;
+    evs.push({
+      clock_id: r.clock_id,
+      event: r.event,
+      work_date: r.work_date,
+      worker_id: r.worker_id,
+      worker: r.worker_name ?? activeProfile()?.display_name ?? null,
+      starts: r.starts ?? null,
+      at: r.at,
+      project_id: r.project_id ?? null,
+      project_name: r.project_name ?? null,
+      recorded_at: r.recorded_at ?? r.at,
+      recorded_by: r.recorded_by ?? null,
+      captured_offline: false,
+      version: 1,
+      supersedes: null,
+      synced_at: r.at,
+    });
+    have.add(r.clock_id);
+    added++;
+  }
+  if (added) await persist();
+  return added;
+}
+
+// Pull the active worker's recent stamps from the server and merge. Fired on
+// app launch and after a phone-number restore; best-effort — offline simply
+// means the device-local view stands until the next launch.
+export async function pullClockEvents(worker_id) {
+  const wid = worker_id ?? activeProfile()?.worker_id;
+  if (!wid) return 0;
+  try {
+    const r = await call("worker-auth", { action: "my-clock-events", worker_id: wid });
+    if (r?.ok && Array.isArray(r.events)) return await mergeClockEvents(r.events);
+  } catch { /* offline — local view stands */ }
+  return 0;
 }
 
 // Today's completed span for the strip's "day recorded" state. Latest pair wins.

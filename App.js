@@ -11,7 +11,7 @@ import { Avatar } from "./src/components/ui";
 import WelcomeBack from "./src/components/WelcomeBack";
 import { makeT } from "./src/i18n";
 import { todayStr } from "./src/schema";
-import { activeProfile, clearAllLocal, currentProject, getSettings, load, logOut, myProjects, pendingCount, recentProjects, removeProjectFromList, saveSettings, setCurrentProject } from "./src/store";
+import { activeProfile, clearAllLocal, currentProject, getSettings, load, logOut, myProjects, pendingCount, pullClockEvents, recentProjects, removeProjectFromList, saveSettings, setCurrentProject } from "./src/store";
 import { refreshLocation } from "./src/location";
 import { registerPushToken, syncReminders } from "./src/notifications";
 import { onSyncActivity, syncNow } from "./src/sync";
@@ -174,6 +174,10 @@ export default function App() {
       setLang(getSettings().lang || "en");
       setProfile(activeProfile());
       setReady(true);
+      // Day-clock rehydration: the server's stamps are the truth a wiped or
+      // second device is missing — merge them so a running punch-in shows up
+      // here instead of "Start Day" (timer-reset bug, Jeffrey 2026-08-01).
+      pullClockEvents().then((n) => { if (n) setTick((x) => x + 1); });
     });
     SplashScreen.hideAsync().catch(() => {}); // overlay takes over from here
   }, []);

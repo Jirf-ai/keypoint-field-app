@@ -98,6 +98,46 @@ describe("day clock", () => {
     await store.setCurrentProject({ id: "p2", name: "456 Other Ave" });
     expect(store.openClock()).toBeNull(); // other project — not my clock
   });
+
+  // The timer-reset bug (2026-08-01): a wiped device restored by phone number
+  // had no local clock_events, so a running punch-in showed as "Start Day"
+  // again. mergeClockEvents brings the server's stamps back.
+  test("server rehydration restores a running clock and resumes its elapsed time", async () => {
+    const me = store.activeProfile();
+    const startAt = new Date(Date.now() - 3 * 3600_000).toISOString(); // punched in 3h ago
+    const serverRow = {
+      clock_id: "srv-start-1", event: "start", work_date: TODAY,
+      worker_id: me.worker_id, worker_name: "Ana", starts: null,
+      at: startAt, project_id: "p1", project_name: "123 Test St",
+    };
+    expect(await store.mergeClockEvents([serverRow])).toBe(1);
+    const open = store.openClock();
+    expect(open?.clock_id).toBe("srv-start-1");
+    expect(open?.at).toBe(startAt); // timer continues from the ORIGINAL punch-in
+    // Idempotent — the next pull adds nothing.
+    expect(await store.mergeClockEvents([serverRow])).toBe(0);
+    // Already server-side — must never re-enter the pending queue.
+    expect(store.pendingByProject()["p1"]?.clock_events ?? []).toHaveLength(0);
+    // End Day closes the rehydrated start like any local one.
+    await store.clockEnd(open);
+    expect(store.openClock()).toBeNull();
+    expect(store.clockFor(TODAY).start.clock_id).toBe("srv-start-1");
+  });
+
+  test("a rehydrated start+end pair reads as a recorded day, not a running clock", async () => {
+    const me = store.activeProfile();
+    const rows = [
+      { clock_id: "s1", event: "start", work_date: TODAY, worker_id: me.worker_id,
+        at: "2026-08-01T14:00:00Z", project_id: "p1", project_name: "123 Test St" },
+      { clock_id: "e1", event: "end", work_date: TODAY, worker_id: me.worker_id,
+        starts: "s1", at: "2026-08-01T22:30:00Z", project_id: "p1", project_name: "123 Test St" },
+    ];
+    expect(await store.mergeClockEvents(rows)).toBe(2);
+    expect(store.openClock()).toBeNull();
+    const pair = store.clockFor(TODAY);
+    expect(pair.start.clock_id).toBe("s1");
+    expect(pair.end.clock_id).toBe("e1");
+  });
 });
 
 describe("sync bookkeeping", () => {
