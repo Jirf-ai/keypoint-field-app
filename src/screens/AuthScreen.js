@@ -18,7 +18,7 @@ import { call } from "../api";
 import { REQUIRE_PHONE_VERIFICATION } from "../schema";
 import { copyToClipboard } from "../util";
 import { fetchMyProjects, newWorkerId, sendOtp, verifyOtp } from "../auth";
-import { createProfile, gcAccount, joinByCode, logIn, profiles, pullClockEvents, restoreProfile, seedRestoredProjects, setGcAccount } from "../store";
+import { createProfile, gcAccount, joinByCode, logIn, profiles, pullWorkerData, restoreProfile, seedRestoredProjects, setGcAccount } from "../store";
 import { colors, fonts, type } from "../theme";
 
 
@@ -275,7 +275,7 @@ export default function AuthScreen({ t, lang, onDone }) {
     if (r.accounts && r.accounts.length > 0) {
       const p = await restoreProfile(r.accounts[0], ph);
       await reseedProjects(p.worker_id);
-      await pullClockEvents(p.worker_id); // a running punch-in survives the restore
+      await pullWorkerData(p.worker_id); // running punch-in + week's hours survive the restore
       onDone(p, { welcomeBack: true }); // the "Welcome back, NAME" moment
       return;
     }
@@ -289,7 +289,7 @@ export default function AuthScreen({ t, lang, onDone }) {
   async function lgPickAccount(account) {
     const p = await restoreProfile(account, lgPhone.replace(/\D/g, ""));
     await reseedProjects(p.worker_id);
-    await pullClockEvents(p.worker_id); // a running punch-in survives the restore
+    await pullWorkerData(p.worker_id); // running punch-in + week's hours survive the restore
     onDone(p, { welcomeBack: true });
   }
 

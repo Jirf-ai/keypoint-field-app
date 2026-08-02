@@ -163,6 +163,41 @@ describe("photo-draft crash net", () => {
   });
 });
 
+describe("labor rehydration (My Hours survives device loss)", () => {
+  test("server rows fill the week, honor amend chains, never re-queue or dupe", async () => {
+    const me = store.activeProfile();
+    const serverRows = [
+      { labor_id: "srv-l1", project_id: "p1", project_name: "123 Test St", work_date: TODAY,
+        trade: "laborer", worker_id: me.worker_id, worker_name: "Ana", hours: "8.00",
+        hour_type: "regular", hourly_rate: "25.00", phase: "drywall", area: "Interior",
+        note: null, clock_id: "srv-c1", recorded_by: "Jeffrey", recorded_at: "2026-08-01T20:00:00Z",
+        version: 1, supersedes: null },
+      // An SM correction chain: v2 supersedes v1 — only v2 may count.
+      { labor_id: "srv-l2", project_id: "p1", project_name: "123 Test St", work_date: TODAY,
+        trade: "laborer", worker_id: me.worker_id, worker_name: "Ana", hours: "0.50",
+        hour_type: "overtime", hourly_rate: "25.00", phase: "drywall", area: "Interior",
+        note: null, clock_id: null, recorded_by: "Robert", recorded_at: "2026-08-01T21:00:00Z",
+        version: 1, supersedes: null },
+      { labor_id: "srv-l3", project_id: "p1", project_name: "123 Test St", work_date: TODAY,
+        trade: "laborer", worker_id: me.worker_id, worker_name: "Ana", hours: "0.25",
+        hour_type: "overtime", hourly_rate: "25.00", phase: "drywall", area: "Interior",
+        note: null, clock_id: null, recorded_by: "Robert", recorded_at: "2026-08-01T22:00:00Z",
+        version: 2, supersedes: "srv-l2" },
+    ];
+    expect(await store.mergeLaborLines(serverRows)).toBe(3);
+    // Active view: v1 8h + v2-of-chain 0.25h; the superseded 0.5h is out.
+    const week = store.myWeekHours(TODAY);
+    expect(week.total).toBe(8.25);
+    expect(week.byType.regular).toBe(8);
+    expect(week.byType.overtime).toBe(0.25);
+    // Idempotent, and nothing re-enters the sync queue.
+    expect(await store.mergeLaborLines(serverRows)).toBe(0);
+    expect(store.pendingCount()).toBe(0);
+    // Clock provenance survives the merge.
+    expect(store.activeLines(TODAY).find((l) => l.line_id === "srv-l1").clock_id).toBe("srv-c1");
+  });
+});
+
 describe("multi-context union merge", () => {
   test("adopts another tab's rows and stamps, never duplicates or deletes", async () => {
     const mine = await store.addLine(LABOR);

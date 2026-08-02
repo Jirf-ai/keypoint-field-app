@@ -841,6 +841,80 @@ export async function pullClockEvents(worker_id) {
   return 0;
 }
 
+// Server → device rehydration for the worker's OWN labor lines (2026-08-02):
+// "My hours" read only device-local rows, so a wiped device — or hours
+// recorded for the worker elsewhere (SM's phone, a manual re-entry) — showed
+// a 0.0 week while the server held every row. Merge the server's recent rows
+// for this worker: dedupe by line_id, arrivals are pre-synced, and append-only
+// amend chains are honored (a row's `supersedes` marks the older version
+// superseded here too, so nothing double-counts).
+export async function mergeLaborLines(rows) {
+  const lines = state.lines ?? (state.lines = []);
+  const byId = new Map(lines.map((l) => [l.line_id, l]));
+  let added = 0;
+  for (const r of rows ?? []) {
+    const id = r?.labor_id ?? r?.line_id;
+    if (!id || byId.has(id)) continue;
+    const line = {
+      line_id: id,
+      kind: "labor",
+      cost_class: "L",
+      work_date: r.work_date,
+      trade: r.trade ?? null,
+      worker: r.worker_name ?? r.worker ?? null,
+      worker_id: r.worker_id ?? null,
+      hours: Number(r.hours) || 0,
+      hour_type: r.hour_type ?? "regular",
+      hourly_rate: r.hourly_rate == null ? null : Number(r.hourly_rate),
+      phase: r.phase ?? null,
+      area: r.area ?? null,
+      note: r.note ?? null,
+      clock_id: r.clock_id ?? null,
+      project_id: r.project_id ?? null,
+      project_name: r.project_name ?? null,
+      recorded_at: r.recorded_at ?? null,
+      recorded_by: r.recorded_by ?? null,
+      captured_offline: false,
+      version: r.version ?? 1,
+      supersedes: r.supersedes ?? null,
+      synced_at: r.recorded_at ?? new Date().toISOString(),
+    };
+    lines.push(line);
+    byId.set(id, line);
+    added++;
+  }
+  if (added) {
+    // Re-link amend chains across the union: any version pointing at an older
+    // one marks it superseded locally, whichever side each row arrived from.
+    for (const l of lines) {
+      if (!l.supersedes) continue;
+      const old = byId.get(l.supersedes);
+      if (old && !old.superseded_by) old.superseded_by = l.line_id;
+    }
+    await persist();
+  }
+  return added;
+}
+
+// Launch/restore rehydration bundle: the worker's clock stamps AND their own
+// labor lines come back together. Best-effort — offline just means the local
+// view stands until the next launch.
+export async function pullWorkerData(worker_id) {
+  const wid = worker_id ?? activeProfile()?.worker_id;
+  if (!wid) return 0;
+  const [clocks, labor] = await Promise.all([
+    pullClockEvents(wid),
+    (async () => {
+      try {
+        const r = await call("worker-auth", { action: "my-labor", worker_id: wid });
+        if (r?.ok && Array.isArray(r.labor)) return await mergeLaborLines(r.labor);
+      } catch { /* offline — local view stands */ }
+      return 0;
+    })(),
+  ]);
+  return clocks + labor;
+}
+
 // Today's completed span for the strip's "day recorded" state. Latest pair wins.
 export function clockFor(work_date) {
   const me = activeProfile();

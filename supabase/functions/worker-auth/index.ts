@@ -38,6 +38,14 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 //       field_clock_events). The client merges these on launch and after a
 //       phone restore so a wiped device does NOT reset a running punch-in —
 //       the timer resumes from the original start stamp (Jeffrey 2026-08-01).
+//   my-labor { worker_id }
+//     → { ok, labor: [ { labor_id, project_id, project_name, work_date, trade,
+//        worker_id, worker_name, hours, hour_type, hourly_rate, phase, area,
+//        note, clock_id, recorded_by, recorded_at, version, supersedes } ] }
+//       The worker's own labor lines from the last 14 days — "My hours" read
+//       only device-local rows, so a wiped device (or hours recorded for the
+//       worker elsewhere: SM device, manual re-entry) showed a 0.0 week while
+//       the server held every row (Jeffrey 2026-08-02).
 //
 // Real SMS is a flip: set TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM secrets and the
 // code is texted instead of returned. Codes are hashed at rest and expire.
@@ -283,5 +291,26 @@ Deno.serve(async (req) => {
     return json({ ok: true, events });
   }
 
-  return json({ error: "action must be send-otp | verify-otp | roster | remember-project | my-projects | my-clock-events" }, 400);
+  if (action === "my-labor") {
+    const worker_id = String(body.worker_id ?? "").trim();
+    if (!worker_id) return json({ ok: false, error: "worker_id is required" }, 400);
+    // 14-day window: covers the current + previous pay week.
+    const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+    const { data: rows, error } = await supabase.from("field_labor_entries")
+      .select("labor_id, project_id, work_date, trade, worker_id, worker_name, hours, hour_type, hourly_rate, phase, area, note, clock_id, recorded_by, recorded_at, version, supersedes")
+      .eq("worker_id", worker_id)
+      .gte("work_date", since)
+      .order("recorded_at", { ascending: true });
+    if (error) return json({ ok: false, error: error.message }, 500);
+    const pids = [...new Set((rows ?? []).map((r) => r.project_id).filter(Boolean))];
+    const names: Record<string, string> = {};
+    if (pids.length) {
+      const { data: ps } = await supabase.from("projects").select("id, name").in("id", pids);
+      for (const p of ps ?? []) names[p.id] = p.name;
+    }
+    const labor = (rows ?? []).map((r) => ({ ...r, project_name: r.project_id ? names[r.project_id] ?? null : null }));
+    return json({ ok: true, labor });
+  }
+
+  return json({ error: "action must be send-otp | verify-otp | roster | remember-project | my-projects | my-clock-events | my-labor" }, 400);
 });
