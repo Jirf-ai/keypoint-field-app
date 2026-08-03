@@ -53,10 +53,16 @@ end $$;
 --   select cron.schedule('notify-clocks-minutely', '* * * * *', $cron$
 --     select net.http_post(
 --       url     := 'https://<project-ref>.supabase.co/functions/v1/notify-clocks',
---       headers := '{"Content-Type":"application/json","x-cron-key":"<CRON_KEY>"}'::jsonb,
+--       headers := '{"Content-Type":"application/json",
+--                    "Authorization":"Bearer <ANON_KEY>",
+--                    "x-cron-key":"<CRON_KEY>"}'::jsonb,
 --       body    := '{}'::jsonb
 --     );
 --   $cron$);
+--
+-- The Authorization header is the platform gateway's JWT check (any valid
+-- key; the public anon key is fine) — without it the request 401s before the
+-- function runs. Found live 2026-08-03. x-cron-key remains the real gate.
 --
 -- CRON_KEY is a random string set BOTH as an edge-function secret and in the
 -- cron header — the function refuses anything else, so knowing the public
