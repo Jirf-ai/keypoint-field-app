@@ -10,6 +10,7 @@ import { isSyncing, syncNow } from "../sync";
 import { Btn, Card, CaptureTiles, EmptyState, GroupLabel, LedgerRow, Muted, ProjectPlate, usd, usdCents } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { syncReminders } from "../notifications";
+import { CLOCK_POLICY } from "../schema";
 import {
   activeProfile,
   clockCap,
@@ -59,7 +60,7 @@ function UpdatingSpinner({ t }) {
 // running strip is green (= active, like submit/upload) and flips amber when
 // the clock is clearly forgotten. Not a capture tile because it is not a cost
 // record — same rule that keeps the incident button separate.
-function DayClock({ t, lang, workDate, nav, onStart }) {
+function DayClock({ t, lang, workDate, nav, onStart, onSync }) {
   const open = openClock();
   const done = clockFor(workDate);
   // Tick the elapsed readout while running; 30s keeps it honest without
@@ -67,8 +68,8 @@ function DayClock({ t, lang, workDate, nav, onStart }) {
   // needs a 10s tick to read as a countdown.
   const [, setTick] = useState(0);
   const openId = open?.clock_id;
-  const otMins = 8 * 60; // CLOCK_POLICY.overtimeAfterHours — display gate only
-  const graceMins = 5;   // CLOCK_POLICY.otConfirmGraceMinutes
+  const otMins = CLOCK_POLICY.overtimeAfterHours * 60;
+  const graceMins = CLOCK_POLICY.otConfirmGraceMinutes;
   const elapsedNow = open ? Math.floor((Date.now() - new Date(open.at)) / 60000) : 0;
   const inOtWindow = open && !otConfirmed(open.clock_id) && elapsedNow >= otMins - 1 && elapsedNow < otMins + graceMins;
   useEffect(() => {
@@ -147,8 +148,9 @@ function DayClock({ t, lang, workDate, nav, onStart }) {
             </View>
             <Pressable
               onPress={async () => {
-                await confirmOvertime(open.clock_id);
+                await confirmOvertime(open); // append-only ot_confirm event — syncs
                 setTick((x) => x + 1);
+                onSync?.(); // push the confirmation up so the server cron sees it
                 syncReminders(); // re-arm: drops the 8h warning, arms the 12h check
               }}
               style={({ pressed }) => [s.otBtn, pressed && { opacity: 0.85 }]}
@@ -372,6 +374,7 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
           lang={lang}
           workDate={workDate}
           nav={nav}
+          onSync={onSync}
           onStart={async () => {
             await clockStart(workDate);
             syncReminders(); // arm the "still on the clock?" quit-time nudge

@@ -779,18 +779,42 @@ export async function clockEnd(startEvent, atISO) {
 
 // ---- Overtime confirmation (2026-08-03). At 8h the worker is notified they
 // have 5 minutes to confirm overtime; unconfirmed, the payable span CAPS at
-// 8h + grace. Nothing is auto-written: the cap is computed at read time
-// (clockCap) and End Day records to it — append-only stays intact and no
-// background job is needed. Confirmations are device-local UX state (the
-// labor rows that sync are already the truth of what was paid).
+// 8h + grace. Nothing is auto-written for the cap: it is computed at read
+// time (clockCap) and End Day records to it — append-only stays intact and
+// no background job is needed.
+//
+// A confirmation is itself an append-only clock event (`ot_confirm`,
+// starts = the start stamp's clock_id) so it rides the normal sync spine:
+// the server's notify-clocks cron reads it (no 12h nag for capped days, no
+// 8h warning re-send), and my-clock-events rehydration restores it on a
+// wiped device. state.ot_confirms is the pre-event legacy map — still read,
+// never written.
 
 export function otConfirmed(clock_id) {
-  return !!(state.ot_confirms ?? {})[clock_id];
+  if ((state.ot_confirms ?? {})[clock_id]) return true;
+  return (state.clock_events ?? []).some(
+    (e) => e.event === "ot_confirm" && e.starts === clock_id,
+  );
 }
 
-export async function confirmOvertime(clock_id) {
-  state.ot_confirms = { ...(state.ot_confirms ?? {}), [clock_id]: new Date().toISOString() };
+export async function confirmOvertime(startEvent) {
+  if (otConfirmed(startEvent.clock_id)) return null; // idempotent — one confirm per clock
+  const ev = stamp({
+    clock_id: uuid(),
+    event: "ot_confirm",
+    work_date: startEvent.work_date,
+    worker_id: startEvent.worker_id,
+    worker: startEvent.worker,
+    starts: startEvent.clock_id,
+    at: new Date().toISOString(),
+  });
+  // Like clockEnd: the confirmation belongs to the project the start opened,
+  // even if current_project has moved on.
+  ev.project_id = startEvent.project_id;
+  ev.project_name = startEvent.project_name;
+  state.clock_events = [...(state.clock_events ?? []), ev];
   await persist();
+  return ev;
 }
 
 // The forced-close stamp for an unconfirmed-OT clock: start + 8h + grace,
@@ -832,7 +856,7 @@ export async function mergeClockEvents(rows) {
   let added = 0;
   for (const r of rows ?? []) {
     if (!r?.clock_id || have.has(r.clock_id)) continue;
-    if (r.event !== "start" && r.event !== "end") continue;
+    if (r.event !== "start" && r.event !== "end" && r.event !== "ot_confirm") continue;
     evs.push({
       clock_id: r.clock_id,
       event: r.event,

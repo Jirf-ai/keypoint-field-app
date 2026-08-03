@@ -139,6 +139,31 @@ self.addEventListener("activate", (e) => {
   );
 });
 
+// Web Push (2026-08-03): the server's notify-clocks cron reaches phones
+// through here — the 8h overtime warning and 12h still-working check land
+// even with the app closed. Payload is JSON {title, body, tag}.
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch {}
+  e.waitUntil(self.registration.showNotification(d.title || "Kaicon Field", {
+    body: d.body || "",
+    tag: d.tag || "kaicon-field",
+    icon: "./icon-192.png",
+    badge: "./icon-192.png",
+    data: d,
+  }));
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) if ("focus" in c) return c.focus();
+      return self.clients.openWindow("./");
+    }),
+  );
+});
+
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return; // sync/API calls always hit the network
   const url = new URL(e.request.url);

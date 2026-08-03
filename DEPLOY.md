@@ -62,3 +62,31 @@ base path (app.config.js), which is only for the retired GitHub Pages host.
   distribution is ever needed.
 - **GitHub Pages** (`jirf-ai.github.io/keypoint-field-app`) is **retired** — its
   deploy workflow was removed. That URL serves a frozen old build; don't share it.
+
+## Web Push backend (2026-08-03 — one-time setup, then hands-off)
+
+The client half (Settings toggle, `src/push.js`, `sw.js` push handlers) ships
+with the normal Cloudflare deploy. The server half needs, once, with
+`SUPABASE_ACCESS_TOKEN` set (or `npx supabase login`):
+
+1. **Migration** — `supabase/migrations/20260803_web_push.sql`
+   (`worker_push_subscriptions`, `field_push_log`, `field_clock_events.event`
+   learns `ot_confirm`). Apply via MCP `apply_migration` or
+   `npx supabase db push`.
+2. **Function secrets** — from the untracked `.secrets/webpush-secrets.json`
+   (generated 2026-08-03; regenerate with the node one-liner in git history if
+   lost — a NEW VAPID key orphans existing subscriptions, so keep this one):
+   `npx supabase secrets set VAPID_PUBLIC_KEY=… VAPID_PRIVATE_JWK=… CRON_KEY=… VAPID_SUBJECT=mailto:… --project-ref bbkeogzyqwszmijmvlmj`
+   The public key is ALSO hardcoded in `src/push.js` — they must match.
+3. **Deploy functions** — `push-token` (v2: web_push subscribe/remove shapes)
+   and `notify-clocks` (the minute cron worker; bundles `webpush.js`, which is
+   RFC 8291-vector-tested by `node --test scripts/webpush.test.mjs`).
+4. **Cron** — run the `cron.schedule('notify-clocks-minutely', …)` SQL from the
+   note at the bottom of the migration file, substituting the real CRON_KEY.
+   pg_cron + pg_net are already enabled on the project (classify-photos uses
+   them).
+
+Verify: subscribe a phone via Settings → "Notifications on this phone" (PWA
+must be installed to the Home Screen on iOS), insert a test start event >8h
+old, invoke notify-clocks with the `x-cron-key` header, expect the push and a
+`field_push_log` row; delete the test rows after.

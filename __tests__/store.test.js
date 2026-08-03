@@ -246,9 +246,42 @@ describe("overtime confirmation gate", () => {
     expect(capMin).toBe(8 * 60 + 5);
   });
 
-  test("confirming overtime removes the cap and survives reload", async () => {
+  test("confirming overtime removes the cap and rides the sync spine", async () => {
     const ev = await startedHoursAgo(9);
-    await store.confirmOvertime(ev.clock_id);
+    const confirm = await store.confirmOvertime(ev);
+    expect(store.otConfirmed(ev.clock_id)).toBe(true);
+    expect(store.clockCap(ev)).toBeNull();
+    // The confirmation is an append-only clock event pointed at the start —
+    // notify-clocks (server cron) and cross-device rehydration read it there.
+    expect(confirm.event).toBe("ot_confirm");
+    expect(confirm.starts).toBe(ev.clock_id);
+    const pending = store.pendingByProject()["p1"].clock_events.map((e) => e.clock_id);
+    expect(pending).toContain(confirm.clock_id);
+    // Idempotent: a second confirm writes nothing.
+    expect(await store.confirmOvertime(ev)).toBeNull();
+  });
+
+  test("a rehydrated ot_confirm from the server counts as confirmed", async () => {
+    const me = store.activeProfile();
+    const startAt = new Date(Date.now() - 9 * 3_600_000).toISOString();
+    const rows = [
+      { clock_id: "srv-s1", event: "start", work_date: TODAY, worker_id: me.worker_id,
+        at: startAt, project_id: "p1", project_name: "123 Test St" },
+      { clock_id: "srv-c1", event: "ot_confirm", work_date: TODAY, worker_id: me.worker_id,
+        starts: "srv-s1", at: startAt, project_id: "p1", project_name: "123 Test St" },
+    ];
+    expect(await store.mergeClockEvents(rows)).toBe(2);
+    expect(store.otConfirmed("srv-s1")).toBe(true);
+    expect(store.clockCap(store.openClock())).toBeNull(); // confirmed — no cap
+    // Server copies never re-enter the pending queue.
+    expect(store.pendingByProject()["p1"]?.clock_events ?? []).toHaveLength(0);
+  });
+
+  test("legacy device-local confirmations (pre-event map) still count", async () => {
+    const ev = await startedHoursAgo(9);
+    // Simulate a confirmation saved by the 2026-08-03 map-based build.
+    const state = await store.load();
+    state.ot_confirms = { [ev.clock_id]: new Date().toISOString() };
     expect(store.otConfirmed(ev.clock_id)).toBe(true);
     expect(store.clockCap(ev)).toBeNull();
   });

@@ -3,12 +3,13 @@
 // is set in mono so it reads as "not editable" (§SettingsScreen). A GC account
 // on this device also finds its standing team code here (locked to the
 // account; copy to hand to the crew — workers can't register without it).
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { Avatar, Btn, Card, ChipWall, Field, GroupLabel, Muted, Segmented, StackedFooter } from "../components/ui";
 import { parseProject } from "../components/ProjectPicker";
 import { copyToClipboard } from "../util";
 import { syncReminders } from "../notifications";
+import { disablePush, enablePush, pushStatus } from "../push";
 import { call } from "../api";
 import { todayStr } from "../schema";
 import { activeProfile, currentProject, gcAccount, getSettings, myProjects, saveSettings } from "../store";
@@ -28,6 +29,22 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [wifiOnly, setWifiOnly] = useState(!!st.wifiOnlyPhotos);
+  // Web Push (PWA): "on" | "off" | "blocked" | "unsupported" — read from the
+  // browser, not from settings, so the row can never disagree with reality.
+  const [push, setPush] = useState("unsupported");
+  useEffect(() => {
+    if (Platform.OS === "web") pushStatus().then(setPush);
+  }, []);
+  async function togglePush(v) {
+    if (v) {
+      const r = await enablePush();
+      // "server"/"subscribe-failed" are retryable — leave the switch off, not dead.
+      setPush(r.ok ? "on" : r.reason === "blocked" ? "blocked" : r.reason === "unsupported" ? "unsupported" : "off");
+    } else {
+      await disablePush();
+      setPush("off");
+    }
+  }
   const [remind, setRemind] = useState(!!st.remindEndOfDay);
   const [remindTime, setRemindTime] = useState(st.reminderTime || "17:00");
   const [remindDenied, setRemindDenied] = useState(false);
@@ -156,6 +173,30 @@ export default function SettingsScreen({ t, onDone, onLogout, onWipe }) {
             </View>
             <Switch value={wifiOnly} onValueChange={toggleWifi} trackColor={{ false: "rgba(42,38,34,0.14)", true: colors.ink }} thumbColor="#ffffff" />
           </View>
+
+          {/* Web Push — how the 8h overtime warning and 12h check reach an
+              installed PWA with the app closed. iOS needs the app on the Home
+              Screen; a plain Safari tab reads as unsupported. */}
+          {Platform.OS === "web" && (
+            <>
+              <View style={s.prefDivider} />
+              <View style={s.prefRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.prefLabel}>{t("pushLabel")}</Text>
+                  <Muted style={{ marginTop: 3 }}>{t("pushHint")}</Muted>
+                </View>
+                <Switch
+                  value={push === "on"}
+                  disabled={push === "unsupported"}
+                  onValueChange={togglePush}
+                  trackColor={{ false: "rgba(42,38,34,0.14)", true: colors.ink }}
+                  thumbColor="#ffffff"
+                />
+              </View>
+              {push === "unsupported" && <Muted style={{ marginTop: 8 }}>{t("pushUnsupported")}</Muted>}
+              {push === "blocked" && <Muted style={{ marginTop: 8, color: colors.amber }}>{t("pushBlocked")}</Muted>}
+            </>
+          )}
 
           {/* Local reminders are native only. */}
           {Platform.OS !== "web" && (

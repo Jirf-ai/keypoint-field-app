@@ -7,3 +7,4 @@ web-build/
 .env.*
 .DS_Store
 supabase/.temp/
+.secrets/
