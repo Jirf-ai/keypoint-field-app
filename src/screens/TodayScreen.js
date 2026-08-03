@@ -82,34 +82,14 @@ function DayClock({ t, lang, workDate, nav, onStart, onSync }) {
     const mins = Math.max(0, Math.floor((Date.now() - new Date(open.at)) / 60000));
     const cap = clockCap(open); // set = OT unconfirmed and the grace ran out
     const confirmed = otConfirmed(open.clock_id);
-    const otDue = !cap && !confirmed && mins >= otMins; // the 5-minute window
+    // The elapsed readout NEVER freezes (Jeffrey 2026-08-03: the timer must
+    // show real time worked) — the cap stays as what End Day RECORDS when
+    // overtime goes unconfirmed, and the confirm bar stays available past the
+    // grace window so a worker still on site can make the full span official.
+    // TODAY's clock only: a stale forgotten clock keeps the cap with no
+    // confirm offer — "yes I'm working" two days later must not mint 47h.
+    const otDue = !confirmed && mins >= otMins && open.work_date === workDate;
     const overdue = open.work_date !== workDate || mins > 12 * 60;
-
-    // Grace expired: the payable span is capped — the strip stops "running"
-    // and sends them to End Day (which records to the cap, not to now).
-    if (cap) {
-      return (
-        <View style={[s.clockCard, s.clockCardOverdue]}>
-          <View style={{ flex: 1 }}>
-            <View style={s.clockLabelRow}>
-              <View style={[s.clockDot, s.clockDotOverdue]} />
-              <Text style={[s.clockLabel, s.clockLabelOverdue]}>
-                {t("dayClosedAt")} {timeStr(cap, lang)}
-              </Text>
-            </View>
-            <Text style={s.clockOtHint}>{t("otClosedHint")}</Text>
-          </View>
-          <Pressable
-            onPress={() => nav("endday")}
-            style={({ pressed }) => [s.endBtn, pressed && { opacity: 0.85 }]}
-            accessibilityRole="button"
-            accessibilityLabel={t("endDay")}
-          >
-            <Text style={s.endBtnText}>{t("endDay")}</Text>
-          </Pressable>
-        </View>
-      );
-    }
 
     return (
       <View>
@@ -143,7 +123,9 @@ function DayClock({ t, lang, workDate, nav, onStart, onSync }) {
             <View style={{ flex: 1 }}>
               <Text style={s.otBarTitle}>{t("otConfirmBar")}</Text>
               <Text style={s.otBarCount}>
-                {t("otClosesIn")} {Math.max(1, otMins + graceMins - mins)} {t("minShort")}
+                {cap
+                  ? `${t("dayClosedAt")} ${timeStr(cap, lang)}`
+                  : `${t("otClosesIn")} ${Math.max(1, otMins + graceMins - mins)} ${t("minShort")}`}
               </Text>
             </View>
             <Pressable
