@@ -12,8 +12,10 @@ import { phaseLabel } from "../i18n";
 import { syncReminders } from "../notifications";
 import {
   activeProfile,
+  clockCap,
   clockFor,
   clockStart,
+  confirmOvertime,
   crewLogStatus,
   currentProject,
   dayStatus,
@@ -22,6 +24,7 @@ import {
   deletePhoto,
   myWeekHours,
   openClock,
+  otConfirmed,
   photosFor,
   updatePhotoMeta,
   visibleLines,
@@ -59,43 +62,103 @@ function UpdatingSpinner({ t }) {
 function DayClock({ t, lang, workDate, nav, onStart }) {
   const open = openClock();
   const done = clockFor(workDate);
-  // Tick the elapsed readout while running; 30s keeps it honest without churn.
+  // Tick the elapsed readout while running; 30s keeps it honest without
+  // churn — except inside the OT-confirm window, where a 5-minute countdown
+  // needs a 10s tick to read as a countdown.
   const [, setTick] = useState(0);
   const openId = open?.clock_id;
+  const otMins = 8 * 60; // CLOCK_POLICY.overtimeAfterHours — display gate only
+  const graceMins = 5;   // CLOCK_POLICY.otConfirmGraceMinutes
+  const elapsedNow = open ? Math.floor((Date.now() - new Date(open.at)) / 60000) : 0;
+  const inOtWindow = open && !otConfirmed(open.clock_id) && elapsedNow >= otMins - 1 && elapsedNow < otMins + graceMins;
   useEffect(() => {
     if (!openId) return;
-    const iv = setInterval(() => setTick((x) => x + 1), 30_000);
+    const iv = setInterval(() => setTick((x) => x + 1), inOtWindow ? 10_000 : 30_000);
     return () => clearInterval(iv);
-  }, [openId]);
+  }, [openId, inOtWindow]);
 
   if (open) {
     const mins = Math.max(0, Math.floor((Date.now() - new Date(open.at)) / 60000));
+    const cap = clockCap(open); // set = OT unconfirmed and the grace ran out
+    const confirmed = otConfirmed(open.clock_id);
+    const otDue = !cap && !confirmed && mins >= otMins; // the 5-minute window
     const overdue = open.work_date !== workDate || mins > 12 * 60;
+
+    // Grace expired: the payable span is capped — the strip stops "running"
+    // and sends them to End Day (which records to the cap, not to now).
+    if (cap) {
+      return (
+        <View style={[s.clockCard, s.clockCardOverdue]}>
+          <View style={{ flex: 1 }}>
+            <View style={s.clockLabelRow}>
+              <View style={[s.clockDot, s.clockDotOverdue]} />
+              <Text style={[s.clockLabel, s.clockLabelOverdue]}>
+                {t("dayClosedAt")} {timeStr(cap, lang)}
+              </Text>
+            </View>
+            <Text style={s.clockOtHint}>{t("otClosedHint")}</Text>
+          </View>
+          <Pressable
+            onPress={() => nav("endday")}
+            style={({ pressed }) => [s.endBtn, pressed && { opacity: 0.85 }]}
+            accessibilityRole="button"
+            accessibilityLabel={t("endDay")}
+          >
+            <Text style={s.endBtnText}>{t("endDay")}</Text>
+          </Pressable>
+        </View>
+      );
+    }
+
     return (
-      <View style={[s.clockCard, overdue && s.clockCardOverdue]}>
-        <View style={{ flex: 1 }}>
-          <View style={s.clockLabelRow}>
-            <View style={[s.clockDot, overdue && s.clockDotOverdue]} />
-            <Text style={[s.clockLabel, overdue && s.clockLabelOverdue]}>
-              {t(overdue ? "stillOnClockQ" : "onTheClock")}
+      <View>
+        <View style={[s.clockCard, overdue && s.clockCardOverdue]}>
+          <View style={{ flex: 1 }}>
+            <View style={s.clockLabelRow}>
+              <View style={[s.clockDot, overdue && s.clockDotOverdue]} />
+              <Text style={[s.clockLabel, overdue && s.clockLabelOverdue]}>
+                {t(overdue ? "stillOnClockQ" : "onTheClock")}
+              </Text>
+            </View>
+            <Text style={s.clockElapsed}>
+              {Math.floor(mins / 60)}:{String(mins % 60).padStart(2, "0")}
+            </Text>
+            <Text style={s.clockSince}>
+              {t("sinceAt")} {timeStr(open.at, lang)}
+              {open.work_date !== workDate ? ` · ${open.work_date}` : ""}
             </Text>
           </View>
-          <Text style={s.clockElapsed}>
-            {Math.floor(mins / 60)}:{String(mins % 60).padStart(2, "0")}
-          </Text>
-          <Text style={s.clockSince}>
-            {t("sinceAt")} {timeStr(open.at, lang)}
-            {open.work_date !== workDate ? ` · ${open.work_date}` : ""}
-          </Text>
+          <Pressable
+            onPress={() => nav("endday")}
+            style={({ pressed }) => [s.endBtn, pressed && { opacity: 0.85 }]}
+            accessibilityRole="button"
+            accessibilityLabel={t("endDay")}
+          >
+            <Text style={s.endBtnText}>{t("endDay")}</Text>
+          </Pressable>
         </View>
-        <Pressable
-          onPress={() => nav("endday")}
-          style={({ pressed }) => [s.endBtn, pressed && { opacity: 0.85 }]}
-          accessibilityRole="button"
-          accessibilityLabel={t("endDay")}
-        >
-          <Text style={s.endBtnText}>{t("endDay")}</Text>
-        </Pressable>
+        {otDue && (
+          <View style={s.otBar}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.otBarTitle}>{t("otConfirmBar")}</Text>
+              <Text style={s.otBarCount}>
+                {t("otClosesIn")} {Math.max(1, otMins + graceMins - mins)} {t("minShort")}
+              </Text>
+            </View>
+            <Pressable
+              onPress={async () => {
+                await confirmOvertime(open.clock_id);
+                setTick((x) => x + 1);
+                syncReminders(); // re-arm: drops the 8h warning, arms the 12h check
+              }}
+              style={({ pressed }) => [s.otBtn, pressed && { opacity: 0.85 }]}
+              accessibilityRole="button"
+              accessibilityLabel={t("otConfirmBtn")}
+            >
+              <Text style={s.otBtnText}>{t("otConfirmBtn")}</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
     );
   }
@@ -602,6 +665,25 @@ const s = StyleSheet.create({
   clockSince: { fontFamily: fonts.mono, fontSize: 10, fontWeight: "600", letterSpacing: 0.6, textTransform: "uppercase", color: colors.textMuted, marginTop: 1 },
   endBtn: { backgroundColor: colors.ink, borderRadius: 10, paddingVertical: 13, paddingHorizontal: 16 },
   endBtnText: { fontFamily: fonts.body, fontSize: 14, fontWeight: "700", color: colors.onInk },
+  clockOtHint: { fontFamily: fonts.body, fontSize: 12, lineHeight: 17, color: colors.amber, marginTop: 3, paddingRight: 8 },
+  // OT-confirm bar — unresolved/blocking state, so this is one of orange's
+  // three sanctioned jobs (theme header rule #2).
+  otBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 6,
+    backgroundColor: `${colors.accent}14`,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  otBarTitle: { fontFamily: fonts.body, fontSize: 13.5, fontWeight: "700", color: colors.text },
+  otBarCount: { fontFamily: fonts.mono, fontSize: 11, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", color: colors.accent, marginTop: 2, fontVariant: ["tabular-nums"] },
+  otBtn: { backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14 },
+  otBtnText: { fontFamily: fonts.body, fontSize: 13.5, fontWeight: "700", color: colors.onInk },
   clockDone: {
     backgroundColor: colors.surfaceSunken,
     borderRadius: 12,

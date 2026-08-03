@@ -7,7 +7,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { call } from "./api";
-import { areasFor, todayStr } from "./schema";
+import { areasFor, CLOCK_POLICY, todayStr } from "./schema";
 import { lastLocation } from "./location";
 import { clearPixels, deletePixels, getPixels, putPixels } from "./photoStore";
 import { shrinkDataUri } from "./util";
@@ -756,7 +756,7 @@ export async function clockStart(work_date) {
   return ev;
 }
 
-export async function clockEnd(startEvent) {
+export async function clockEnd(startEvent, atISO) {
   const ev = stamp({
     clock_id: uuid(),
     event: "end",
@@ -764,7 +764,9 @@ export async function clockEnd(startEvent) {
     worker_id: startEvent.worker_id,
     worker: startEvent.worker,
     starts: startEvent.clock_id,
-    at: new Date().toISOString(),
+    // atISO = the OT cap when overtime went unconfirmed (store.clockCap) — the
+    // end stamp must match the span the receipt paid, not the tap time.
+    at: atISO ?? new Date().toISOString(),
   });
   // An overnight forget means state.current_project may have moved on; the end
   // stamp must land on the project the start opened.
@@ -773,6 +775,33 @@ export async function clockEnd(startEvent) {
   state.clock_events = [...(state.clock_events ?? []), ev];
   await persist();
   return ev;
+}
+
+// ---- Overtime confirmation (2026-08-03). At 8h the worker is notified they
+// have 5 minutes to confirm overtime; unconfirmed, the payable span CAPS at
+// 8h + grace. Nothing is auto-written: the cap is computed at read time
+// (clockCap) and End Day records to it — append-only stays intact and no
+// background job is needed. Confirmations are device-local UX state (the
+// labor rows that sync are already the truth of what was paid).
+
+export function otConfirmed(clock_id) {
+  return !!(state.ot_confirms ?? {})[clock_id];
+}
+
+export async function confirmOvertime(clock_id) {
+  state.ot_confirms = { ...(state.ot_confirms ?? {}), [clock_id]: new Date().toISOString() };
+  await persist();
+}
+
+// The forced-close stamp for an unconfirmed-OT clock: start + 8h + grace,
+// once that moment has passed. Null while the clock may still run (under 8h,
+// inside the grace window, or overtime confirmed).
+export function clockCap(startEvent) {
+  if (!startEvent || otConfirmed(startEvent.clock_id)) return null;
+  const capMs =
+    new Date(startEvent.at).getTime() +
+    (CLOCK_POLICY.overtimeAfterHours * 60 + CLOCK_POLICY.otConfirmGraceMinutes) * 60_000;
+  return Date.now() >= capMs ? new Date(capMs).toISOString() : null;
 }
 
 // The active worker's dangling start on the current project — today's, or an

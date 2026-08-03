@@ -224,6 +224,44 @@ describe("multi-context union merge", () => {
   });
 });
 
+describe("overtime confirmation gate", () => {
+  const startedHoursAgo = async (h) => {
+    const ev = await store.clockStart(TODAY);
+    ev.at = new Date(Date.now() - h * 3_600_000).toISOString();
+    return ev;
+  };
+
+  test("no cap under 8h, none inside the grace window", async () => {
+    const ev = await startedHoursAgo(7);
+    expect(store.clockCap(ev)).toBeNull();
+    ev.at = new Date(Date.now() - (8 * 60 + 3) * 60_000).toISOString(); // 8h03
+    expect(store.clockCap(ev)).toBeNull();
+  });
+
+  test("unconfirmed OT caps at start + 8h + grace", async () => {
+    const ev = await startedHoursAgo(9);
+    const cap = store.clockCap(ev);
+    expect(cap).not.toBeNull();
+    const capMin = (new Date(cap) - new Date(ev.at)) / 60_000;
+    expect(capMin).toBe(8 * 60 + 5);
+  });
+
+  test("confirming overtime removes the cap and survives reload", async () => {
+    const ev = await startedHoursAgo(9);
+    await store.confirmOvertime(ev.clock_id);
+    expect(store.otConfirmed(ev.clock_id)).toBe(true);
+    expect(store.clockCap(ev)).toBeNull();
+  });
+
+  test("clockEnd honors an explicit cap stamp", async () => {
+    const ev = await startedHoursAgo(9);
+    const cap = store.clockCap(ev);
+    const end = await store.clockEnd(ev, cap);
+    expect(end.at).toBe(cap);
+    expect(end.starts).toBe(ev.clock_id);
+  });
+});
+
 describe("sync bookkeeping", () => {
   test("pendingByProject groups rows the way sync-field-log wants them", async () => {
     const labor = await store.addLine(LABOR);

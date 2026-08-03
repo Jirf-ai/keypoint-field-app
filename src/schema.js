@@ -108,6 +108,10 @@ export const CLOCK_POLICY = {
   lunchMinutes: 30,        // auto-deducted once the raw span exceeds…
   lunchAfterHours: 6,      // …this many hours on the clock
   overtimeAfterHours: 8,   // regular caps here; the rest records as overtime
+  otConfirmGraceMinutes: 5, // past 8h the worker gets this long to confirm OT
+                            // in the app; unconfirmed, the payable span caps
+                            // at 8h + grace (see store.clockCap)
+  stillWorkingCheckHours: 12, // "still working?" nudge on a confirmed-OT clock
 };
 
 // start/end are ISO strings. Returns everything the receipt shows plus the

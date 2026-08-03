@@ -9,8 +9,8 @@ import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { call } from "./api";
 import { STRINGS } from "./i18n";
-import { todayStr } from "./schema";
-import { activeProfile, clockFor, getSettings, loggedLaborToday, openClock } from "./store";
+import { CLOCK_POLICY, todayStr } from "./schema";
+import { activeProfile, clockFor, getSettings, loggedLaborToday, openClock, otConfirmed } from "./store";
 
 const HORIZON_DAYS = 7;
 
@@ -113,6 +113,22 @@ export async function syncReminders() {
     let when = at(st.reminderTime || "17:00");
     if (when <= now) when = new Date(now.getTime() + 30 * 60_000);
     await schedule("stillOnClockQ", "stillOnClockBody", when);
+
+    // Overtime gate (2026-08-03). At 8h: confirm OT in the app within the
+    // grace window or the payable span caps (store.clockCap enforces at read
+    // time — this notification is the warning, the cap is the teeth).
+    const open = openClock();
+    const startMs = new Date(open.at).getTime();
+    const confirmed = otConfirmed(open.clock_id);
+    if (!confirmed) {
+      const eightAt = new Date(startMs + CLOCK_POLICY.overtimeAfterHours * 3_600_000);
+      if (eightAt > now) await schedule("otNotifTitle", "otNotifBody", eightAt);
+    } else {
+      // Only a confirmed-OT clock can still be running at 12h — ask if
+      // they're actually working (the forgotten-timer defense past the cap).
+      const twelveAt = new Date(startMs + CLOCK_POLICY.stillWorkingCheckHours * 3_600_000);
+      if (twelveAt > now) await schedule("twelveHrTitle", "twelveHrBody", twelveAt);
+    }
   }
 
   // Morning "Start your day" nudge (2026-07-31). True arrive-at-site geofencing

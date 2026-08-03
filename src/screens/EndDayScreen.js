@@ -12,7 +12,7 @@ import SubmitCelebration from "../components/SubmitCelebration";
 import { Card, EmptyState, FormScreen, GroupLabel, MathStrip, NoticeCard, NumericField, PHASE_ORDER, PickerRow, StickyFooter, TRADE_ORDER } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { computeClockHours, TRADES, todayStr, validateLabor } from "../schema";
-import { activeProfile, addLine, clockEnd, currentAreas, getSettings, openClock } from "../store";
+import { activeProfile, addLine, clockCap, clockEnd, currentAreas, getSettings, openClock } from "../store";
 import { buzz, timeStr } from "../util";
 import { colors, fonts, type } from "../theme";
 
@@ -44,7 +44,10 @@ export default function EndDayScreen({ t, lang, onDone }) {
   // Only reachable from a running clock; a stale navigation just shows empty.
   if (!start) return <EmptyState body={t("noEntriesToday")} style={{ marginTop: 14 }} />;
 
-  const c = computeClockHours(start.at, new Date().toISOString());
+  // Unconfirmed overtime caps the payable span at 8h + grace (store.clockCap):
+  // the receipt and the end stamp both stop at the cap, never at the tap.
+  const capAt = clockCap(start);
+  const c = computeClockHours(start.at, capAt ?? new Date().toISOString());
   const closingEarlierDay = start.work_date !== todayStr();
   const longDay = c.elapsedMin > 12 * 60;
   const total = c.hours * Number(rate || 0);
@@ -52,8 +55,10 @@ export default function EndDayScreen({ t, lang, onDone }) {
   async function save() {
     if (saving) return;
     // Recompute at the moment of confirmation — the receipt on screen may be
-    // minutes old by the time the thumb lands.
-    const now = computeClockHours(start.at, new Date().toISOString());
+    // minutes old by the time the thumb lands (and the cap may have landed
+    // in the meantime).
+    const capNow = clockCap(start);
+    const now = computeClockHours(start.at, capNow ?? new Date().toISOString());
     if (now.hours > 0) {
       const base = {
         kind: "labor",
@@ -81,12 +86,12 @@ export default function EndDayScreen({ t, lang, onDone }) {
         return;
       }
       setSaving(true);
-      await clockEnd(start);
+      await clockEnd(start, capNow ?? undefined);
       await addLine(base);
       if (now.overtime > 0) await addLine({ ...base, hour_type: "overtime", hours: now.overtime });
     } else {
       setSaving(true);
-      await clockEnd(start);
+      await clockEnd(start, capNow ?? undefined);
     }
     // The record is committed locally (sync rides behind) — the day earned its
     // send-off: diamond spins up, launches, "Day sent successfully".
@@ -123,11 +128,18 @@ export default function EndDayScreen({ t, lang, onDone }) {
           <Text style={s.warnText}>{t("earlierDayNote")} · {start.work_date}</Text>
         </NoticeCard>
       )}
+      {capAt && (
+        <NoticeCard tone="warn" style={{ marginTop: 2 }}>
+          <Text style={s.warnText}>
+            {t("dayClosedAt")} {timeStr(capAt, lang)} — {t("otClosedHint")}
+          </Text>
+        </NoticeCard>
+      )}
 
       <Card>
         <GroupLabel>{t("endDayTitle")}</GroupLabel>
         <Text style={s.span}>
-          {timeStr(start.at, lang)} → {timeStr(new Date().toISOString(), lang)}
+          {timeStr(start.at, lang)} → {timeStr(capAt ?? new Date().toISOString(), lang)}
         </Text>
 
         <View style={s.rows}>
