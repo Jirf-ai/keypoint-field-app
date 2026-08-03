@@ -817,15 +817,16 @@ export async function confirmOvertime(startEvent) {
   return ev;
 }
 
-// The forced-close stamp for an unconfirmed-OT clock: start + 8h + grace,
-// once that moment has passed. Null while the clock may still run (under 8h,
-// inside the grace window, or overtime confirmed).
-export function clockCap(startEvent) {
-  if (!startEvent || otConfirmed(startEvent.clock_id)) return null;
-  const capMs =
-    new Date(startEvent.at).getTime() +
-    (CLOCK_POLICY.overtimeAfterHours * 60 + CLOCK_POLICY.otConfirmGraceMinutes) * 60_000;
-  return Date.now() >= capMs ? new Date(capMs).toISOString() : null;
+// OT CAP SUSPENDED (Jeffrey, 2026-08-03 — the gate's first live day capped a
+// crew that was genuinely still working: real crews rush to finish and do not
+// open phones to press confirm buttons). Workers must always SEE and RECORD
+// true time: the timer runs until End Day, End Day records the actual tap
+// (with its GPS fix), and hours past the daily threshold are simply overtime
+// (computeClockHours already splits at CLOCK_POLICY.overtimeAfterHours).
+// The cap returns only with the scheduled-daily-hours redesign (per-worker
+// agreed daily max on the roster; automatic OT past it — no confirm step).
+export function clockCap(_startEvent) {
+  return null;
 }
 
 // The active worker's dangling start on the current project — today's, or an

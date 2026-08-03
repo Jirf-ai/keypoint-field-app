@@ -10,13 +10,10 @@ import { isSyncing, syncNow } from "../sync";
 import { Btn, Card, CaptureTiles, EmptyState, GroupLabel, LedgerRow, Muted, ProjectPlate, usd, usdCents } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { syncReminders } from "../notifications";
-import { CLOCK_POLICY } from "../schema";
 import {
   activeProfile,
-  clockCap,
   clockFor,
   clockStart,
-  confirmOvertime,
   crewLogStatus,
   currentProject,
   dayStatus,
@@ -25,7 +22,6 @@ import {
   deletePhoto,
   myWeekHours,
   openClock,
-  otConfirmed,
   photosFor,
   updatePhotoMeta,
   visibleLines,
@@ -63,32 +59,20 @@ function UpdatingSpinner({ t }) {
 function DayClock({ t, lang, workDate, nav, onStart, onSync }) {
   const open = openClock();
   const done = clockFor(workDate);
-  // Tick the elapsed readout while running; 30s keeps it honest without
-  // churn — except inside the OT-confirm window, where a 5-minute countdown
-  // needs a 10s tick to read as a countdown.
+  // Tick the elapsed readout while running; 30s keeps it honest without churn.
   const [, setTick] = useState(0);
   const openId = open?.clock_id;
-  const otMins = CLOCK_POLICY.overtimeAfterHours * 60;
-  const graceMins = CLOCK_POLICY.otConfirmGraceMinutes;
-  const elapsedNow = open ? Math.floor((Date.now() - new Date(open.at)) / 60000) : 0;
-  const inOtWindow = open && !otConfirmed(open.clock_id) && elapsedNow >= otMins - 1 && elapsedNow < otMins + graceMins;
   useEffect(() => {
     if (!openId) return;
-    const iv = setInterval(() => setTick((x) => x + 1), inOtWindow ? 10_000 : 30_000);
+    const iv = setInterval(() => setTick((x) => x + 1), 30_000);
     return () => clearInterval(iv);
-  }, [openId, inOtWindow]);
+  }, [openId]);
 
   if (open) {
     const mins = Math.max(0, Math.floor((Date.now() - new Date(open.at)) / 60000));
-    const cap = clockCap(open); // set = OT unconfirmed and the grace ran out
-    const confirmed = otConfirmed(open.clock_id);
-    // The elapsed readout NEVER freezes (Jeffrey 2026-08-03: the timer must
-    // show real time worked) — the cap stays as what End Day RECORDS when
-    // overtime goes unconfirmed, and the confirm bar stays available past the
-    // grace window so a worker still on site can make the full span official.
-    // TODAY's clock only: a stale forgotten clock keeps the cap with no
-    // confirm offer — "yes I'm working" two days later must not mint 47h.
-    const otDue = !confirmed && mins >= otMins && open.work_date === workDate;
+    // OT cap suspended (Jeffrey 2026-08-03, see store.clockCap): the timer
+    // runs and displays TRUE elapsed time until the worker taps End Day —
+    // hours past the daily threshold are simply overtime, no confirm step.
     const overdue = open.work_date !== workDate || mins > 12 * 60;
 
     return (
@@ -118,31 +102,6 @@ function DayClock({ t, lang, workDate, nav, onStart, onSync }) {
             <Text style={s.endBtnText}>{t("endDay")}</Text>
           </Pressable>
         </View>
-        {otDue && (
-          <View style={s.otBar}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.otBarTitle}>{t("otConfirmBar")}</Text>
-              <Text style={s.otBarCount}>
-                {cap
-                  ? `${t("dayClosedAt")} ${timeStr(cap, lang)}`
-                  : `${t("otClosesIn")} ${Math.max(1, otMins + graceMins - mins)} ${t("minShort")}`}
-              </Text>
-            </View>
-            <Pressable
-              onPress={async () => {
-                await confirmOvertime(open); // append-only ot_confirm event — syncs
-                setTick((x) => x + 1);
-                onSync?.(); // push the confirmation up so the server cron sees it
-                syncReminders(); // re-arm: drops the 8h warning, arms the 12h check
-              }}
-              style={({ pressed }) => [s.otBtn, pressed && { opacity: 0.85 }]}
-              accessibilityRole="button"
-              accessibilityLabel={t("otConfirmBtn")}
-            >
-              <Text style={s.otBtnText}>{t("otConfirmBtn")}</Text>
-            </Pressable>
-          </View>
-        )}
       </View>
     );
   }

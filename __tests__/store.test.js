@@ -238,12 +238,11 @@ describe("overtime confirmation gate", () => {
     expect(store.clockCap(ev)).toBeNull();
   });
 
-  test("unconfirmed OT caps at start + 8h + grace", async () => {
+  test("cap SUSPENDED (Jeffrey 2026-08-03): no clock is ever capped — workers see true time", async () => {
     const ev = await startedHoursAgo(9);
-    const cap = store.clockCap(ev);
-    expect(cap).not.toBeNull();
-    const capMin = (new Date(cap) - new Date(ev.at)) / 60_000;
-    expect(capMin).toBe(8 * 60 + 5);
+    expect(store.clockCap(ev)).toBeNull(); // 9h unconfirmed — still no cap
+    const stale = await startedHoursAgo(47);
+    expect(store.clockCap(stale)).toBeNull(); // even a forgotten clock: End Day + amend, never a silent cap
   });
 
   test("confirming overtime removes the cap and rides the sync spine", async () => {
@@ -286,12 +285,19 @@ describe("overtime confirmation gate", () => {
     expect(store.clockCap(ev)).toBeNull();
   });
 
-  test("clockEnd honors an explicit cap stamp", async () => {
+  test("clockEnd honors an explicit atISO stamp (correction path)", async () => {
     const ev = await startedHoursAgo(9);
-    const cap = store.clockCap(ev);
-    const end = await store.clockEnd(ev, cap);
-    expect(end.at).toBe(cap);
+    const stampAt = new Date(Date.now() - 30 * 60_000).toISOString();
+    const end = await store.clockEnd(ev, stampAt);
+    expect(end.at).toBe(stampAt);
     expect(end.starts).toBe(ev.clock_id);
+  });
+
+  test("clockEnd with no stamp records NOW — true time, never a cap", async () => {
+    const ev = await startedHoursAgo(9);
+    const before = Date.now();
+    const end = await store.clockEnd(ev, store.clockCap(ev) ?? undefined);
+    expect(new Date(end.at).getTime()).toBeGreaterThanOrEqual(before);
   });
 });
 
