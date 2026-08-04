@@ -12,6 +12,7 @@ import SubmitCelebration from "../components/SubmitCelebration";
 import { Card, EmptyState, FormScreen, GroupLabel, MathStrip, NoticeCard, NumericField, PHASE_ORDER, PickerRow, StickyFooter, TRADE_ORDER } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { computeClockHours, TRADES, todayStr, validateLabor } from "../schema";
+import { useNow } from "../liveClock";
 import { activeProfile, addLine, clockCap, clockEnd, currentAreas, getSettings, openClock } from "../store";
 import { buzz, timeStr } from "../util";
 import { colors, fonts, type } from "../theme";
@@ -34,6 +35,14 @@ export default function EndDayScreen({ t, lang, onDone }) {
   const [errors, setErrors] = useState([]);
   const [saving, setSaving] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
+  // The receipt is LIVE (Jeffrey 2026-08-04). It used to be computed once at
+  // render and never again: a worker who opened End Day, got pulled away, and
+  // tapped End Day twenty minutes later read one set of hours off the screen
+  // while save() recomputed and recorded a different one. Now the receipt
+  // ticks on the minute and on every foreground resume, so what the worker
+  // confirms is exactly what lands.
+  const now = useNow();
+  const nowISO = new Date(now).toISOString();
 
   // MUST come before the no-clock empty state: clockEnd() nulls the open
   // clock, so on the post-save re-render `start` is already gone — checking
@@ -49,19 +58,27 @@ export default function EndDayScreen({ t, lang, onDone }) {
   // capAt stays wired so the scheduled-daily-hours redesign re-enables in one
   // place; while null the cap note below never renders.
   const capAt = clockCap(start);
-  const c = computeClockHours(start.at, capAt ?? new Date().toISOString());
+  const c = computeClockHours(start.at, capAt ?? nowISO);
   const closingEarlierDay = start.work_date !== todayStr();
   const longDay = c.elapsedMin > 12 * 60;
   const total = c.hours * Number(rate || 0);
 
   async function save() {
     if (saving) return;
-    // Recompute at the moment of confirmation — the receipt on screen may be
-    // minutes old by the time the thumb lands (and the cap may have landed
-    // in the meantime).
+    // Recompute at the moment of confirmation — the receipt ticks, but the
+    // thumb still lands some milliseconds after the last flip (and the cap may
+    // have landed in the meantime).
+    //
+    // ONE instant, used twice (Jeffrey 2026-08-04): the span the receipt pays
+    // and the `at` written on the end stamp are now the SAME timestamp.
+    // Previously the math took one Date.now() and clockEnd() took another a
+    // few milliseconds later, so the stored end stamp did not quite reproduce
+    // the stored hours — a straddled minute boundary was enough to make the
+    // audit trail disagree with itself.
     const capNow = clockCap(start);
-    const now = computeClockHours(start.at, capNow ?? new Date().toISOString());
-    if (now.hours > 0) {
+    const endISO = capNow ?? new Date().toISOString();
+    const rec = computeClockHours(start.at, endISO);
+    if (rec.hours > 0) {
       const base = {
         kind: "labor",
         work_date: start.work_date, // a forgotten clock records on ITS day
@@ -70,7 +87,7 @@ export default function EndDayScreen({ t, lang, onDone }) {
         worker: start.worker,
         worker_id: start.worker_id,
         hour_type: "regular",
-        hours: now.regular,
+        hours: rec.regular,
         hourly_rate: rate === "" ? null : Number(rate),
         phase,
         area,
@@ -88,12 +105,12 @@ export default function EndDayScreen({ t, lang, onDone }) {
         return;
       }
       setSaving(true);
-      await clockEnd(start, capNow ?? undefined);
+      await clockEnd(start, endISO);
       await addLine(base);
-      if (now.overtime > 0) await addLine({ ...base, hour_type: "overtime", hours: now.overtime });
+      if (rec.overtime > 0) await addLine({ ...base, hour_type: "overtime", hours: rec.overtime });
     } else {
       setSaving(true);
-      await clockEnd(start, capNow ?? undefined);
+      await clockEnd(start, endISO);
     }
     // The record is committed locally (sync rides behind) — the day earned its
     // send-off: diamond spins up, launches, "Day sent successfully".
@@ -141,7 +158,7 @@ export default function EndDayScreen({ t, lang, onDone }) {
       <Card>
         <GroupLabel>{t("endDayTitle")}</GroupLabel>
         <Text style={s.span}>
-          {timeStr(start.at, lang)} → {timeStr(capAt ?? new Date().toISOString(), lang)}
+          {timeStr(start.at, lang)} → {timeStr(capAt ?? nowISO, lang)}
         </Text>
 
         <View style={s.rows}>

@@ -110,6 +110,9 @@ export default function App() {
   const [screen, setScreen] = useState("today");
   const [lang, setLang] = useState("en");
   const [tick, setTick] = useState(0); // re-render after store writes
+  // Last server clock/labor rehydration, so a foreground wake can refresh a
+  // long-lived PWA without hammering the endpoint on every app switch.
+  const lastPull = useRef(0);
 
   // Launch animation: overlay spins the diamond, then glides into the header
   // logo slot (measured by polling — onLayout is dead on RN-web/Expo 57).
@@ -145,8 +148,23 @@ export default function App() {
   // recheck the date immediately and opportunistically drain the sync queue.
   useEffect(() => {
     const wake = () => {
-      if (todayStr() !== workDate) setTick((x) => x + 1);
+      // ALWAYS re-render on resume (Jeffrey 2026-08-04). This used to bump the
+      // tick only when the DATE had rolled over, so a phone that slept in a
+      // pocket came back painting whatever frame it froze on — for a worker who
+      // tapped Start Day and pocketed the phone, that frame said "0:00". Every
+      // time-derived surface has to be recomputed the moment we're visible
+      // again; a render is cheap, a crew member doubting their hours is not.
+      setTick((x) => x + 1);
       syncNow(); // single-flight; no-op when nothing is pending
+      // …and re-pull the server's clock stamps. Rehydration used to run once
+      // per page load, so an installed PWA that lives for days could never
+      // recover a start it lost locally — it would just offer Start Day again
+      // and restart the day at zero. Throttled: at most once a minute.
+      const t0 = Date.now();
+      if (t0 - lastPull.current > 60_000) {
+        lastPull.current = t0;
+        pullWorkerData().then((n) => { if (n) setTick((x) => x + 1); });
+      }
     };
     if (Platform.OS === "web") {
       if (typeof document === "undefined") return;
@@ -178,6 +196,7 @@ export default function App() {
       // lines are the truth a wiped or second device is missing — merge them
       // so a running punch-in resumes and "My hours" shows the real week
       // (timer-reset bug 2026-08-01; 0.0-week bug 2026-08-02).
+      lastPull.current = Date.now(); // the wake handler throttles off this
       pullWorkerData().then((n) => { if (n) setTick((x) => x + 1); });
     });
     SplashScreen.hideAsync().catch(() => {}); // overlay takes over from here

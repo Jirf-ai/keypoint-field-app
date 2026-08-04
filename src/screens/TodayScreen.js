@@ -9,6 +9,7 @@ import PhotoViewer from "../components/PhotoViewer";
 import { isSyncing, syncNow } from "../sync";
 import { Btn, Card, CaptureTiles, EmptyState, GroupLabel, LedgerRow, Muted, ProjectPlate, usd, usdCents } from "../components/ui";
 import { phaseLabel } from "../i18n";
+import { elapsedStr, minutesSince, useNow } from "../liveClock";
 import { syncReminders } from "../notifications";
 import {
   activeProfile,
@@ -59,17 +60,17 @@ function UpdatingSpinner({ t }) {
 function DayClock({ t, lang, workDate, nav, onStart, onSync }) {
   const open = openClock();
   const done = clockFor(workDate);
-  // Tick the elapsed readout while running; 30s keeps it honest without churn.
-  const [, setTick] = useState(0);
-  const openId = open?.clock_id;
-  useEffect(() => {
-    if (!openId) return;
-    const iv = setInterval(() => setTick((x) => x + 1), 30_000);
-    return () => clearInterval(iv);
-  }, [openId]);
+  // The readout is driven by useNow (src/liveClock): it flips on the minute
+  // boundary AND recomputes the instant the app returns to the foreground.
+  // The old 30s setInterval froze with the page — a phone pocketed right after
+  // Start Day came back showing the "0:00" it was carrying when it went to
+  // sleep, which crews reasonably read as "my day never started"
+  // (Jeffrey 2026-08-04). Elapsed is always derived from the START STAMP, so
+  // the timer CONTINUES from the morning tap; it never restarts at zero.
+  const now = useNow();
 
   if (open) {
-    const mins = Math.max(0, Math.floor((Date.now() - new Date(open.at)) / 60000));
+    const mins = minutesSince(open.at, now);
     // OT cap suspended (Jeffrey 2026-08-03, see store.clockCap): the timer
     // runs and displays TRUE elapsed time until the worker taps End Day —
     // hours past the daily threshold are simply overtime, no confirm step.
@@ -85,9 +86,7 @@ function DayClock({ t, lang, workDate, nav, onStart, onSync }) {
                 {t(overdue ? "stillOnClockQ" : "onTheClock")}
               </Text>
             </View>
-            <Text style={s.clockElapsed}>
-              {Math.floor(mins / 60)}:{String(mins % 60).padStart(2, "0")}
-            </Text>
+            <Text style={s.clockElapsed}>{elapsedStr(mins)}</Text>
             <Text style={s.clockSince}>
               {t("sinceAt")} {timeStr(open.at, lang)}
               {open.work_date !== workDate ? ` · ${open.work_date}` : ""}
@@ -125,7 +124,9 @@ function DayClock({ t, lang, workDate, nav, onStart, onSync }) {
         accessibilityLabel={t("startDay")}
       >
         <Text style={s.startLbl}>{t("startDay")}</Text>
-        <Text style={s.startNow}>{timeStr(new Date().toISOString(), lang)}</Text>
+        {/* The clock face on the button rides useNow too — a stale "6:30 AM"
+            on a phone that woke at 10 would misrepresent the stamp it takes. */}
+        <Text style={s.startNow}>{timeStr(new Date(now).toISOString(), lang)}</Text>
       </Pressable>
       <Text style={s.startHint}>{t("startDayHint")}</Text>
     </View>
