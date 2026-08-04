@@ -201,6 +201,10 @@ const RECEIPT_TZ_OFFSET = "-07:00";
 const ITEM_SCHEMA = {
   type: "object",
   properties: {
+    is_return: {
+      type: "boolean",
+      description: "True if this document is a RETURN / REFUND / CREDIT — money going BACK to the customer — rather than a purchase. Home Depot prints these with RETURN or CREDIT in the header and often references the original invoice. False for an ordinary purchase.",
+    },
     purchased_at: { type: "string", description: "Date and time PRINTED on the receipt as YYYY-MM-DDTHH:MM (24h). Empty string if unreadable." },
     po_job: { type: "string", description: "PO / JOB NAME / job-reference field, often a project number. Empty string if absent." },
     store: { type: "string", description: "Store number or branch address." },
@@ -231,7 +235,7 @@ const ITEM_SCHEMA = {
       },
     },
   },
-  required: ["purchased_at", "po_job", "store", "purchaser", "subtotal", "tax", "tax_exempt", "total", "payment_method", "payment_last4", "return_by", "items"],
+  required: ["is_return", "purchased_at", "po_job", "store", "purchaser", "subtotal", "tax", "tax_exempt", "total", "payment_method", "payment_last4", "return_by", "items"],
   additionalProperties: false,
 } as const;
 
@@ -314,13 +318,18 @@ async function itemizeReceipts(
             { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } },
             {
               type: "text",
-              text: "This is a purchase receipt photographed by a construction crew. " +
+              text: "This is a store receipt photographed by a construction crew. " +
                 "Transcribe it exactly as printed — do not infer, round, or tidy prices. " +
                 "Read every priced line in order, including bottle deposits, lumber and " +
                 "environmental fees, and discounts (as negative lines). Where a line's " +
                 "amount is ambiguous because of print alignment, choose the reading that " +
                 "makes the line amounts sum to the printed subtotal. Use empty string or 0 " +
-                "for any field you cannot read confidently.",
+                "for any field you cannot read confidently. " +
+                "It may be a RETURN rather than a purchase — crews take things back the " +
+                "same day. Set is_return true when the money is going back to the " +
+                "customer (RETURN/REFUND/CREDIT in the header, a credited total, or a " +
+                "reference to the original sale being reversed), and transcribe the " +
+                "amounts as printed either way.",
             },
           ],
         }],
@@ -358,8 +367,10 @@ async function itemizeReceipts(
         receipt_payment_last4: r.payment_last4?.trim() || null,
         receipt_return_by: r.return_by?.trim() || null,
       };
-      // A fuller invoice number than pass A's glance is worth keeping.
-      if (r.total > 0) header.receipt_total = r.total;
+      // A fuller invoice number than pass A's glance is worth keeping. Stored
+      // as a magnitude — the sign lives on the line rows, so a return's header
+      // reads "$109 of Home Depot" the same way the purchase does.
+      if (Math.abs(Number(r.total) || 0) > 0) header.receipt_total = Math.abs(Number(r.total));
 
       if (items.length === 0) {
         await stamp("no_items", header);
@@ -367,46 +378,75 @@ async function itemizeReceipts(
         continue;
       }
 
-      // The guard: transcribed lines plus tax must land on the printed total.
-      const lineSum = items.reduce((s, it) => s + (Number(it.extended) || 0), 0);
-      const expected = Number(r.total) || 0;
-      const delta = Math.abs(lineSum + (Number(r.tax) || 0) - expected);
+      // RETURNS (2026-08-04, Jeffrey: "if the receipt is identified as a
+      // return, do option 1 for me always"). A crew member can take a purchase
+      // back the same day — Robert did exactly that with a $109 floor scraper,
+      // and because this guard assumes a purchase it refused the return receipt
+      // and left the project carrying cost it no longer had.
+      //
+      // A return prints as credits, but WHICH SIGN reaches us depends on the
+      // receipt and the transcription, so reconcile on MAGNITUDES: the lines
+      // must account for the amount refunded, whichever way they were read.
+      const isReturn = r.is_return === true;
+      const rawLineSum = items.reduce((s, it) => s + (Number(it.extended) || 0), 0);
+      const lineSum = isReturn ? Math.abs(rawLineSum) : rawLineSum;
+      const tax = isReturn ? Math.abs(Number(r.tax) || 0) : (Number(r.tax) || 0);
+      const expected = isReturn ? Math.abs(Number(r.total) || 0) : (Number(r.total) || 0);
+      const delta = Math.abs(lineSum + tax - expected);
       if (expected <= 0 || delta > RECONCILE_TOLERANCE) {
         await stamp("unreconciled", header);
-        out.push({ photo_id: p.photo_id, status: "unreconciled", line_sum: lineSum, receipt_total: expected });
+        out.push({ photo_id: p.photo_id, status: "unreconciled", line_sum: lineSum, receipt_total: expected, is_return: isReturn });
         continue;
       }
 
       const now = new Date().toISOString();
-      const rows = items.map((it) => ({
-        // line_id, phase and area are NOT NULL with no database default — the
-        // client supplies all three or the insert is rejected.
-        line_id: crypto.randomUUID(),
-        log_id: p.log_id,
-        project_id: p.project_id,
-        work_date: p.work_date,
-        cost_class: it.cost_class || "M",
-        description: it.description,
-        upc: it.upc?.trim() || null,
-        // The receipt photo rarely carries a phase/area; fall back to the same
-        // default the hand-entered receipt lines have used since 7/31.
-        phase: p.phase || "mobilization",
-        area: p.area || "Sitework",
-        qty: it.qty,
-        unit: it.unit || "EA",
-        unit_cost: it.unit_price,
-        qty_is_estimated: false,
-        vendor: p.receipt_vendor ?? null,
-        invoice_ref: p.receipt_invoice ?? null,
-        recorded_by: p.recorded_by,
-        recorded_at: now,
-        captured_offline: false,
-        synced_at: now,
-        version: 1,
-        receipt_photo_id: p.photo_id,
-        auto_entered: true,
-        note: `Auto-itemized from the receipt photo ${now.slice(0, 10)} (classify-photos v4). Line totals reconcile to the receipt total; cost class and phase are the model's read — SM may reclassify.`,
-      }));
+      const rows = items.map((it) => {
+        // A credit is any line where money goes back: every line of a return
+        // receipt, and per-item discount lines on an ordinary purchase. Both
+        // are written as NEGATIVE QTY at a POSITIVE unit price — line_total is
+        // generated as qty * unit_cost, so the amount comes out negative and
+        // rollups net on their own.
+        //
+        // Negative qty rather than negative unit_cost, deliberately:
+        // field_unit_cost_observed divides sum(line_total) by sum(qty), so a
+        // purchase and its return cancel to "no units, no observation" instead
+        // of poisoning the street price with a zero or negative reading. The
+        // unit_cost >= 0 check enforces this — before today a discount line
+        // would have been REJECTED outright and the whole receipt skipped.
+        const credit = isReturn || (Number(it.extended) || 0) < 0;
+        const magnitude = Math.abs(Number(it.qty) || 1) || 1; // qty <> 0 is a check constraint
+        return {
+          // line_id, phase and area are NOT NULL with no database default — the
+          // client supplies all three or the insert is rejected.
+          line_id: crypto.randomUUID(),
+          log_id: p.log_id,
+          project_id: p.project_id,
+          work_date: p.work_date,
+          cost_class: it.cost_class || "M",
+          description: credit && isReturn ? `RETURN - ${it.description}` : it.description,
+          upc: it.upc?.trim() || null,
+          // The receipt photo rarely carries a phase/area; fall back to the same
+          // default the hand-entered receipt lines have used since 7/31.
+          phase: p.phase || "mobilization",
+          area: p.area || "Sitework",
+          qty: credit ? -magnitude : magnitude,
+          unit: it.unit || "EA",
+          unit_cost: Math.abs(Number(it.unit_price) || 0),
+          qty_is_estimated: false,
+          vendor: p.receipt_vendor ?? null,
+          invoice_ref: p.receipt_invoice ?? null,
+          recorded_by: p.recorded_by,
+          recorded_at: now,
+          captured_offline: false,
+          synced_at: now,
+          version: 1,
+          receipt_photo_id: p.photo_id,
+          auto_entered: true,
+          note: isReturn
+            ? `RETURN CREDIT auto-posted from the return receipt ${now.slice(0, 10)} (classify-photos v5). Negative qty at the original unit price, so the project nets the refund. Credited amounts reconcile to the receipt total; cost class and phase are the model's read — SM may reclassify.`
+            : `Auto-itemized from the receipt photo ${now.slice(0, 10)} (classify-photos v5). Line totals reconcile to the receipt total; cost class and phase are the model's read — SM may reclassify.`,
+        };
+      });
 
       const { error: insErr } = await supabase.from("field_line_items").insert(rows);
       if (insErr) {
@@ -422,8 +462,10 @@ async function itemizeReceipts(
           .eq("log_id", p.log_id)
           .eq("status", "submitted");
       }
-      await stamp("ok", header);
-      out.push({ photo_id: p.photo_id, status: "ok", lines: rows.length, total: expected });
+      // "return_credited" is its own outcome so returns are findable and are
+      // never mistaken for a purchase that happened to itemize.
+      await stamp(isReturn ? "return_credited" : "ok", header);
+      out.push({ photo_id: p.photo_id, status: isReturn ? "return_credited" : "ok", lines: rows.length, total: expected });
     } catch (e) {
       // Pass B usually runs detached (waitUntil), so a thrown error would
       // otherwise vanish with the response — record it where it can be read.
