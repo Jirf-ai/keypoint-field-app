@@ -107,11 +107,20 @@ export const CLOCK_POLICY = {
   roundQuarterHours: 0.25, // DOL-safe: round net time to the nearest ¼ hour
   lunchMinutes: 30,        // auto-deducted once the raw span exceeds…
   lunchAfterHours: 6,      // …this many hours on the clock
-  overtimeAfterHours: 8,   // regular caps here; the rest records as overtime
-  otConfirmGraceMinutes: 5, // past 8h the worker gets this long to confirm OT
-                            // in the app; unconfirmed, the payable span caps
-                            // at 8h + grace (see store.clockCap)
-  stillWorkingCheckHours: 12, // "still working?" nudge on a confirmed-OT clock
+  overtimeAfterHours: 8,   // regular caps here; the rest records as overtime.
+                           // This is the PAYROLL SPLIT and it is LIVE. It is
+                           // not the gate: it never limits what a worker sees
+                           // or what End Day records.
+  // ⚠️ OVERTIME GATE ON HOLD (Jeffrey 2026-08-03/04) — DORMANT, don't rewire.
+  // store.clockCap returns null unconditionally, the Today confirm bar is
+  // gone, notify-clocks-minutely is cron.unschedule'd, and the 8h warning is
+  // no longer scheduled. Kept only because the scheduled-daily-max redesign
+  // (per-worker agreed daily max on the roster → automatic OT past it, no
+  // confirm step) will reuse the shape.
+  otConfirmGraceMinutes: 5, // UNUSED while the gate is on hold
+  stillWorkingCheckHours: 12, // LIVE, and no longer gate-dependent: the
+                            // "still working?" nudge arms on ANY running clock
+                            // (forgotten-timer defense — it caps nothing)
 };
 
 // start/end are ISO strings. Returns everything the receipt shows plus the

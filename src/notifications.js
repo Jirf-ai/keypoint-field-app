@@ -10,7 +10,10 @@ import Constants from "expo-constants";
 import { call } from "./api";
 import { STRINGS } from "./i18n";
 import { CLOCK_POLICY, todayStr } from "./schema";
-import { activeProfile, clockFor, getSettings, loggedLaborToday, openClock, otConfirmed } from "./store";
+// otConfirmed/confirmOvertime are deliberately NOT imported any more — the
+// overtime gate is on hold and nothing here should branch on it. The store
+// keeps them for the scheduled-daily-max redesign.
+import { activeProfile, clockFor, getSettings, loggedLaborToday, openClock } from "./store";
 
 const HORIZON_DAYS = 7;
 
@@ -114,21 +117,30 @@ export async function syncReminders() {
     if (when <= now) when = new Date(now.getTime() + 30 * 60_000);
     await schedule("stillOnClockQ", "stillOnClockBody", when);
 
-    // Overtime gate (2026-08-03). At 8h: confirm OT in the app within the
-    // grace window or the payable span caps (store.clockCap enforces at read
-    // time — this notification is the warning, the cap is the teeth).
+    // OVERTIME GATE ON HOLD (Jeffrey 2026-08-04, completing the 2026-08-03
+    // suspension). The 8h "confirm overtime within 5 minutes or your day will
+    // be closed" warning was scheduled here — the last armed piece of the gate.
+    // Its promise is no longer true in any language: store.clockCap returns
+    // null, nothing caps, and the confirm bar it told workers to tap was
+    // removed from Today. The server half went first (notify-clocks-minutely
+    // cron.unschedule'd for exactly this reason); this is the client half.
+    //
+    // Native-only code, so it never reached the pilot crew on the PWA — but
+    // store builds are in motion and a warning that lies must not ship with
+    // them. Hours past the daily threshold are simply overtime now
+    // (computeClockHours still splits them; that is payroll accuracy, not a
+    // gate, and it stays).
+    //
+    // The 12h "still working?" nudge SURVIVES, and now arms on ANY running
+    // clock. It used to require an ot_confirm event, which nothing can produce
+    // since the confirm bar was removed — so the forgotten-timer defense had
+    // quietly died with the gate. It caps nothing and asks for nothing: it
+    // just asks a worker still on the clock at midnight whether they meant to
+    // be.
     const open = openClock();
     const startMs = new Date(open.at).getTime();
-    const confirmed = otConfirmed(open.clock_id);
-    if (!confirmed) {
-      const eightAt = new Date(startMs + CLOCK_POLICY.overtimeAfterHours * 3_600_000);
-      if (eightAt > now) await schedule("otNotifTitle", "otNotifBody", eightAt);
-    } else {
-      // Only a confirmed-OT clock can still be running at 12h — ask if
-      // they're actually working (the forgotten-timer defense past the cap).
-      const twelveAt = new Date(startMs + CLOCK_POLICY.stillWorkingCheckHours * 3_600_000);
-      if (twelveAt > now) await schedule("twelveHrTitle", "twelveHrBody", twelveAt);
-    }
+    const twelveAt = new Date(startMs + CLOCK_POLICY.stillWorkingCheckHours * 3_600_000);
+    if (twelveAt > now) await schedule("twelveHrTitle", "twelveHrBody", twelveAt);
   }
 
   // Morning "Start your day" nudge (2026-07-31). True arrive-at-site geofencing
