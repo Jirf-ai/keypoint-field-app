@@ -44,8 +44,10 @@ export default function EndDayScreen({ t, lang, onDone }) {
   // Only reachable from a running clock; a stale navigation just shows empty.
   if (!start) return <EmptyState body={t("noEntriesToday")} style={{ marginTop: 14 }} />;
 
-  // Unconfirmed overtime caps the payable span at 8h + grace (store.clockCap):
-  // the receipt and the end stamp both stop at the cap, never at the tap.
+  // OT cap suspended (store.clockCap returns null, Jeffrey 2026-08-03): the
+  // receipt and the end stamp are the REAL span, start → the actual tap.
+  // capAt stays wired so the scheduled-daily-hours redesign re-enables in one
+  // place; while null the cap note below never renders.
   const capAt = clockCap(start);
   const c = computeClockHours(start.at, capAt ?? new Date().toISOString());
   const closingEarlierDay = start.work_date !== todayStr();
