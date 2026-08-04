@@ -14,15 +14,22 @@ Actions): `CLOUDFLARE_API_TOKEN` (a Cloudflare API token with Pages edit
 permission) and `CLOUDFLARE_ACCOUNT_ID`. Without them the workflow fails
 fast with an error naming this fix — nothing deploys.
 
-> ⚠️ **As of 2026-08-01 CI has NEVER succeeded (13/13 runs failed).** Both
-> secrets are set, but wrangler reports *"The Pages project keypoint-field
-> does not exist"* for the account the secrets point at. The project lives
-> under account **`5ef946c1cc3eba5892b3da3a945c45cf`**
-> (Liaojeff630@gmail.com's Account — `npx wrangler whoami`). Fix: set
-> `CLOUDFLARE_ACCOUNT_ID` to that value, and make sure
-> `CLOUDFLARE_API_TOKEN` was minted **from that same account** with Pages
-> edit permission, then re-run the failed workflow. Until then, every
-> deploy is the manual path below.
+> ✅ **CI WORKS — as of 2026-08-04 the last 7 consecutive runs succeeded.**
+> The account mismatch was fixed; the secrets now point at account
+> **`5ef946c1cc3eba5892b3da3a945c45cf`** (Liaojeff630@gmail.com's Account —
+> `npx wrangler whoami`). **Pushing to `main` IS the deploy.**
+>
+> Because CI deploys on every push, a manual `wrangler pages deploy` made
+> around the same time gets raced. CI builds the pushed commit itself, and
+> its bundle hash will NOT match a local build of the same source, so the
+> apex ends up on whichever deployment landed last (seen 2026-08-04: a manual
+> promote was superseded by CI's build of the same commit — same fix, and the
+> hash check against the local `dist/` looked alarming for a minute). Don't
+> interleave the two: push, then verify the apex. Use the manual path only
+> for a build you have NOT pushed, and always with `--branch fix-check`.
+>
+> *(Historical: through 2026-08-01 CI had never succeeded — 13/13 runs failed
+> with "The Pages project keypoint-field does not exist".)*
 
 ## Manual deploy (fallback / emergency)
 
