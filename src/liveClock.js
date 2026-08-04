@@ -19,8 +19,16 @@ import { Platform } from "react-native";
 // A millisecond timestamp that re-renders the caller every minute and
 // immediately on every resume. Callers compute elapsed time FROM it, so the
 // value on screen is always derived from the real current time.
-export function useNow() {
+//
+// `anchorMs` (optional) is the instant the displayed count is measured FROM —
+// pass the start stamp. Elapsed minutes roll over at the start stamp's second,
+// not on the wall-clock minute: a punch-in at 9:56:49 increments at :49 past
+// every minute. Ticking on :00 instead left the readout up to 59 seconds
+// behind the number it was supposed to be showing (caught on Ggf's live 9:56:49
+// clock, 2026-08-04). Anchoring makes the flip land on the real boundary.
+export function useNow(anchorMs) {
   const [now, setNow] = useState(() => Date.now());
+  const anchor = Number.isFinite(anchorMs) ? anchorMs : 0;
 
   useEffect(() => {
     let timer = null;
@@ -30,11 +38,12 @@ export function useNow() {
       if (dead) return;
       setNow(Date.now());
       if (timer) clearTimeout(timer);
-      // Re-aim at the next minute boundary every time. A timer that was frozen
-      // with the page resumes at an arbitrary offset; re-aiming keeps the flip
-      // aligned to the wall clock instead of inheriting the sleep's drift.
-      // +250ms so we land just past the boundary, never a hair before it.
-      timer = setTimeout(tick, 60_000 - (Date.now() % 60_000) + 250);
+      // Re-aim at the next rollover every time. A timer frozen with the page
+      // resumes at an arbitrary offset, so re-aiming keeps the flip true
+      // instead of inheriting however long the phone slept. +250ms so we land
+      // just past the boundary, never a hair before it.
+      const since = (((Date.now() - anchor) % 60_000) + 60_000) % 60_000;
+      timer = setTimeout(tick, 60_000 - since + 250);
     };
     tick();
 
@@ -63,7 +72,7 @@ export function useNow() {
       if (timer) clearTimeout(timer);
       sub?.remove?.();
     };
-  }, []);
+  }, [anchor]);
 
   return now;
 }

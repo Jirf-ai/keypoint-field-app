@@ -41,7 +41,9 @@ export default function EndDayScreen({ t, lang, onDone }) {
   // while save() recomputed and recorded a different one. Now the receipt
   // ticks on the minute and on every foreground resume, so what the worker
   // confirms is exactly what lands.
-  const now = useNow();
+  // Anchored to the start stamp so the receipt's "on the clock" span flips on
+  // the same boundary the Today strip does — the two can never disagree.
+  const now = useNow(start ? new Date(start.at).getTime() : undefined);
   const nowISO = new Date(now).toISOString();
 
   // MUST come before the no-clock empty state: clockEnd() nulls the open

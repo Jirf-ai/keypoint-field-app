@@ -67,7 +67,9 @@ function DayClock({ t, lang, workDate, nav, onStart, onSync }) {
   // sleep, which crews reasonably read as "my day never started"
   // (Jeffrey 2026-08-04). Elapsed is always derived from the START STAMP, so
   // the timer CONTINUES from the morning tap; it never restarts at zero.
-  const now = useNow();
+  // Anchored to THIS worker's start stamp, so the minute flips on their real
+  // boundary (a 9:56:49 punch-in rolls over at :49, not at :00).
+  const now = useNow(open ? new Date(open.at).getTime() : undefined);
 
   if (open) {
     const mins = minutesSince(open.at, now);
