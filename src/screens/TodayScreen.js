@@ -475,11 +475,21 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
             <View style={s.rollupHead}>
               <View>
                 <GroupLabel>{t("recordedToday")}</GroupLabel>
-                <Text style={type.moneyRollup}>{usd(totals.money)}</Text>
+                {/* Crew rows carry no rate (Payroll owns comp), so their money
+                    total is $0 forever — headline their HOURS instead. SMs
+                    keep the $ rollup: item lines still carry real unit_cost. */}
+                {isSM ? (
+                  <Text style={type.moneyRollup}>{usd(totals.money)}</Text>
+                ) : (
+                  <View style={s.weekRow}>
+                    <Text style={s.weekHours}>{Number(totals.hours).toFixed(1)}</Text>
+                    <Text style={s.weekUnit}>{t("statHours").toLowerCase()}</Text>
+                  </View>
+                )}
               </View>
               <View style={s.rollupMeta}>
                 <Text style={s.metaLine}>{totals.count} {(totals.count === 1 ? t("statLine") : t("statLines")).toUpperCase()}</Text>
-                <Text style={s.metaLine}>{Number(totals.hours).toFixed(1)} {t("statHours").toUpperCase()}</Text>
+                {isSM && <Text style={s.metaLine}>{Number(totals.hours).toFixed(1)} {t("statHours").toUpperCase()}</Text>}
                 {photos.length ? <Text style={s.metaLine}>{photos.length} {(photos.length === 1 ? t("statPhoto") : t("statPhotos")).toUpperCase()}</Text> : null}
               </View>
             </View>
