@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { fetchTeamRoster } from "../auth";
-import { Card, Field, FormScreen, GroupLabel, MathStrip, NoticeCard, NumericField, PHASE_ORDER, PickerRow, Segmented, StickyFooter, TRADE_ORDER } from "../components/ui";
+import { Card, Field, FormScreen, GroupLabel, NoticeCard, NumericField, PHASE_ORDER, PickerRow, Segmented, StickyFooter, TRADE_ORDER } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { HOUR_TYPES, TRADES, validateLabor, laborWarnings } from "../schema";
 import { activeLines, activeProfile, addLine, amendLine, currentAreas, getSettings, setTeamRoster, teamRoster } from "../store";
@@ -18,7 +18,6 @@ import { colors, fonts } from "../theme";
 const FIX_KEYS = {
   V_trade: "fixTrade",
   V3_qty: "fixHours",
-  V4_unit_cost: "fixRate",
   V_hour_type: "hourType",
   V_phase: "fixPhase",
   V_area: "fixArea",
@@ -60,7 +59,8 @@ export default function AddLaborScreen({ t, lang, workDate, onDone, editing }) {
   const [trade, setTrade] = useState(editing?.trade ?? me?.default_trade ?? null);
   const [hours, setHours] = useState(editing ? String(editing.hours ?? "") : "");
   const [hourType, setHourType] = useState(editing?.hour_type ?? "regular");
-  const [rate, setRate] = useState(editing?.hourly_rate != null ? String(editing.hourly_rate) : (st.lastRate ?? ""));
+  // No rate state (Jeffrey 2026-08-04): SMs record hours like everyone else;
+  // the worker's rate is inner-company data on the Payroll agent.
   const [phase, setPhase] = useState(editing?.phase ?? st.lastPhase);
   const [area, setArea] = useState(editing?.area ?? st.lastArea);
   const [note, setNote] = useState(editing?.note ?? "");
@@ -68,7 +68,6 @@ export default function AddLaborScreen({ t, lang, workDate, onDone, editing }) {
   const [warned, setWarned] = useState(null);
 
   const worker = forOther ? otherName : myName;
-  const total = Number(hours || 0) * Number(rate || 0);
 
   async function save() {
     const entry = {
@@ -82,7 +81,7 @@ export default function AddLaborScreen({ t, lang, workDate, onDone, editing }) {
       worker_id: forOther ? (otherId && otherId !== "__manual" ? otherId : null) : me?.worker_id ?? null,
       hours: Number(hours),
       hour_type: hourType,
-      hourly_rate: rate === "" ? null : Number(rate),
+      hourly_rate: null, // rates never ride field rows — Payroll owns comp
       phase,
       area,
       note: note.trim() || null,
@@ -116,11 +115,9 @@ export default function AddLaborScreen({ t, lang, workDate, onDone, editing }) {
         </NoticeCard>
       )}
       <Card>
-        <View style={s.numRow}>
-          <NumericField label={t("hours")} value={hours} onChangeText={(x) => setHours(x.replace(/[^0-9.]/g, ""))} placeholder="0" style={{ flex: 1 }} />
-          <NumericField label={t("rate")} value={rate} onChangeText={(x) => setRate(x.replace(/[^0-9.]/g, ""))} placeholder="0" style={{ flex: 1 }} />
-        </View>
-        <MathStrip left={`${hours || "0"} × ${rate || "0"}`} amount={`$${total.toLocaleString("en-US", { maximumFractionDigits: 2 })}`} />
+        {/* Rate field + $ math strip removed 2026-08-04 (Jeffrey): hours
+            only — the worker's rate is the Payroll agent's business. */}
+        <NumericField label={t("hours")} value={hours} onChangeText={(x) => setHours(x.replace(/[^0-9.]/g, ""))} placeholder="0" />
       </Card>
 
       <Card>

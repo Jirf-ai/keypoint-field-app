@@ -107,34 +107,47 @@ export const CLOCK_POLICY = {
   roundQuarterHours: 0.25, // DOL-safe: round net time to the nearest ¼ hour
   lunchMinutes: 30,        // auto-deducted once the raw span exceeds…
   lunchAfterHours: 6,      // …this many hours on the clock
-  overtimeAfterHours: 8,   // regular caps here; the rest records as overtime.
-                           // This is the PAYROLL SPLIT and it is LIVE. It is
-                           // not the gate: it never limits what a worker sees
-                           // or what End Day records.
-  // ⚠️ OVERTIME GATE ON HOLD (Jeffrey 2026-08-03/04) — DORMANT, don't rewire.
-  // store.clockCap returns null unconditionally, the Today confirm bar is
-  // gone, notify-clocks-minutely is cron.unschedule'd, and the 8h warning is
-  // no longer scheduled. Kept only because the scheduled-daily-max redesign
-  // (per-worker agreed daily max on the roster → automatic OT past it, no
-  // confirm step) will reuse the shape.
-  otConfirmGraceMinutes: 5, // UNUSED while the gate is on hold
-  stillWorkingCheckHours: 12, // LIVE, and no longer gate-dependent: the
-                            // "still working?" nudge arms on ANY running clock
+  // ---- Recorded-hours policy (Jeffrey 2026-08-04) ----
+  // The Field app records HOURS ONLY — compensation is inner-company (the
+  // Payroll agent holds each worker's rate; nothing here prices anything).
+  // Mon–Fri: recorded hours cap at 8, all regular — weekday overtime does
+  // not exist in this policy. Sat/Sun: every hour IS overtime (payroll pays
+  // 150%), day capped under 12. The cap is INTERNAL: the visible timer keeps
+  // running true (the never-freeze rule stands); the cap is what End Day
+  // RECORDS.
+  weekdayCapHours: 8,
+  weekendCapHours: 12,
+  overtimeAfterHours: 8,   // legacy constant (pre-2026-08-04 split); no
+                           // longer used by computeClockHours — weekday OT
+                           // is gone and weekends are all-OT by day type.
+  otConfirmGraceMinutes: 5, // UNUSED — OT-confirm gate on hold (2026-08-03)
+  stillWorkingCheckHours: 12, // "still working?" nudge on ANY running clock
                             // (forgotten-timer defense — it caps nothing)
 };
 
 // start/end are ISO strings. Returns everything the receipt shows plus the
 // regular/overtime split. Never negative; a sub-15-minute day rounds to 0 and
 // writes no labor line.
+//
+// Policy 2026-08-04 (Jeffrey): the day type decides everything. Mon–Fri caps
+// at 8 recorded hours, all regular. Sat/Sun is ALL overtime (payroll pays
+// 150%), capped under 12. Day type comes from the START stamp's local date —
+// a shift that straddles midnight belongs to the day it began on, same rule
+// clockEnd uses for work_date. `capped` reports that the cap bit (display
+// may say so; the timer itself never freezes).
 export function computeClockHours(startISO, endISO) {
   const elapsedMin = Math.max(0, Math.round((new Date(endISO) - new Date(startISO)) / 60000));
   const lunchMin = elapsedMin > CLOCK_POLICY.lunchAfterHours * 60 ? CLOCK_POLICY.lunchMinutes : 0;
   const netMin = Math.max(0, elapsedMin - lunchMin);
   const step = CLOCK_POLICY.roundQuarterHours;
-  const hours = Math.round(netMin / 60 / step) * step;
-  const regular = Math.min(hours, CLOCK_POLICY.overtimeAfterHours);
-  const overtime = Math.max(0, +(hours - regular).toFixed(2));
-  return { elapsedMin, lunchMin, netMin, hours, regular, overtime };
+  const rounded = Math.round(netMin / 60 / step) * step;
+  const dow = new Date(startISO).getDay();
+  const weekend = dow === 0 || dow === 6;
+  const cap = weekend ? CLOCK_POLICY.weekendCapHours : CLOCK_POLICY.weekdayCapHours;
+  const hours = Math.min(rounded, cap);
+  const regular = weekend ? 0 : hours;
+  const overtime = weekend ? hours : 0;
+  return { elapsedMin, lunchMin, netMin, hours, regular, overtime, capped: rounded > cap };
 }
 
 // Photo naming convention (§4.5): {project-code}-{YYYYMMDD}-{seq}.jpg
@@ -170,7 +183,8 @@ export function validateLabor(l) {
   const blocks = [];
   if (!l.trade) blocks.push("V_trade");
   if (!(Number(l.hours) > 0)) blocks.push("V3_qty");
-  if (!(Number(l.hourly_rate) >= 0) || l.hourly_rate === "" || l.hourly_rate == null) blocks.push("V4_unit_cost");
+  // No rate check (2026-08-04): the app records hours only — the worker's
+  // rate is inner-company data on the Payroll agent, never typed on site.
   if (!HOUR_TYPES.includes(l.hour_type)) blocks.push("V_hour_type");
   if (l.work_date > todayStr()) blocks.push("V5_future");
   if (!l.phase) blocks.push("V_phase");

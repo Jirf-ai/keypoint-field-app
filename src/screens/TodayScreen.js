@@ -471,7 +471,10 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
                 : Number(l.qty || 0) * Number(l.unit_cost || 0);
               const title = isLabor ? `${l.worker} · ${l.hours}h` : l.description;
               const meta = `${phaseLabel(l.phase, lang)} · ${l.area}${!isLabor && l.qty ? ` · ${l.qty} ${l.unit}` : ""}`;
-              const row = <LedgerRow cls={l.cost_class} title={title} meta={meta} amount={usdCents(amount)} />;
+              // Labor rows carry no rate since 2026-08-04 (Payroll owns comp)
+              // — show no amount rather than a lying "$0.00". Cached pre-cut
+              // rows that still hold a rate keep rendering it.
+              const row = <LedgerRow cls={l.cost_class} title={title} meta={meta} amount={isLabor && l.hourly_rate == null ? "" : usdCents(amount)} />;
               // SM corrects any line. Crew rows are read-only since the day
               // clock landed — hours come off the clock, and fixes are the
               // site manager's (append-only amendLine, named trail).

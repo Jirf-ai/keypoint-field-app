@@ -14,22 +14,36 @@ import {
 } from "../src/schema";
 
 const mins = (h, m = 0) => h * 60 + m;
-// computeClockHours takes ISO strings; build a span of the given minutes.
-const span = (totalMin) => {
-  const start = new Date("2026-07-31T06:00:00Z");
+// computeClockHours takes ISO strings; day type (weekday/weekend) comes from
+// the START stamp's LOCAL date, so anchors are built in local time — the
+// tests mean the same thing in any timezone.
+// 2026-07-31 = Friday (weekday policy), 2026-08-01 = Saturday (weekend).
+const spanFrom = (y, mo, d, totalMin) => {
+  const start = new Date(y, mo - 1, d, 6, 0, 0);
   const end = new Date(start.getTime() + totalMin * 60_000);
   return computeClockHours(start.toISOString(), end.toISOString());
 };
+const span = (totalMin) => spanFrom(2026, 7, 31, totalMin);    // Friday
+const wkspan = (totalMin) => spanFrom(2026, 8, 1, totalMin);   // Saturday
 
-describe("computeClockHours — the End Day receipt", () => {
-  test("standard day: 9h12m − 30m lunch → 8.75, split 8 + 0.75 OT", () => {
+describe("computeClockHours — the End Day receipt (policy 2026-08-04)", () => {
+  test("weekday 9h12m − 30m lunch rounds 8.75 but RECORDS the 8h cap, all regular", () => {
     const c = span(mins(9, 12));
     expect(c.elapsedMin).toBe(552);
     expect(c.lunchMin).toBe(30);
     expect(c.netMin).toBe(522);
-    expect(c.hours).toBe(8.75);
+    expect(c.hours).toBe(8);      // internal cap — weekday OT does not exist
     expect(c.regular).toBe(8);
-    expect(c.overtime).toBe(0.75);
+    expect(c.overtime).toBe(0);
+    expect(c.capped).toBe(true);
+  });
+
+  test("weekday under the cap records true rounded time, uncapped", () => {
+    const c = span(mins(7, 26)); // zhang's real 8/4 shape
+    expect(c.hours).toBe(7);
+    expect(c.regular).toBe(7);
+    expect(c.overtime).toBe(0);
+    expect(c.capped).toBe(false);
   });
 
   test("short day: under the 6h lunch threshold deducts nothing", () => {
@@ -51,11 +65,12 @@ describe("computeClockHours — the End Day receipt", () => {
     expect(span(mins(4, 23)).hours).toBe(4.5);   // 4:23 → up
   });
 
-  test("exactly 8h net stays all regular", () => {
+  test("exactly 8h net on a weekday: all regular, cap untouched", () => {
     const c = span(mins(8, 30)); // − 30 lunch = 8:00
     expect(c.hours).toBe(8);
     expect(c.regular).toBe(8);
     expect(c.overtime).toBe(0);
+    expect(c.capped).toBe(false);
   });
 
   test("sub-15-minute day rounds to 0 — writes no line", () => {
@@ -63,24 +78,51 @@ describe("computeClockHours — the End Day receipt", () => {
   });
 
   test("clock running backwards (device clock skew) clamps to 0, never negative", () => {
-    const c = computeClockHours("2026-07-31T08:00:00Z", "2026-07-31T07:00:00Z");
+    const start = new Date(2026, 6, 31, 8, 0, 0);
+    const end = new Date(2026, 6, 31, 7, 0, 0);
+    const c = computeClockHours(start.toISOString(), end.toISOString());
     expect(c.elapsedMin).toBe(0);
     expect(c.hours).toBe(0);
     expect(c.overtime).toBe(0);
   });
 
-  test("forgotten 14h clock records as-is: 8 regular + 5.5 OT", () => {
-    const c = span(mins(14)); // − 30 lunch = 13:30
-    expect(c.hours).toBe(13.5);
+  test("forgotten 14h weekday clock still records only the 8h cap", () => {
+    const c = span(mins(14)); // − 30 lunch = 13:30 rounded
+    expect(c.hours).toBe(8);
     expect(c.regular).toBe(8);
-    expect(c.overtime).toBe(5.5);
+    expect(c.overtime).toBe(0);
+    expect(c.capped).toBe(true);
   });
 
-  test("overtime has no float dust (0.1+0.2 class of bugs)", () => {
+  test("SATURDAY is all overtime — payroll pays 150%, the app just classifies", () => {
+    const c = wkspan(mins(6));
+    expect(c.hours).toBe(6);
+    expect(c.regular).toBe(0);
+    expect(c.overtime).toBe(6);
+    expect(c.capped).toBe(false);
+  });
+
+  test("weekend day caps at 12 recorded hours", () => {
+    const c = wkspan(mins(14)); // − 30 lunch = 13:30 rounded
+    expect(c.hours).toBe(12);
+    expect(c.regular).toBe(0);
+    expect(c.overtime).toBe(12);
+    expect(c.capped).toBe(true);
+  });
+
+  test("Sunday classifies like Saturday", () => {
+    const c = spanFrom(2026, 8, 2, mins(9)); // Sunday, − 30 lunch = 8.5
+    expect(c.regular).toBe(0);
+    expect(c.overtime).toBe(8.5);
+  });
+
+  test("split arithmetic is exact on both day types (float dust)", () => {
     for (let m = 0; m < mins(16); m += 13) {
-      const { hours, regular, overtime } = span(m);
-      expect(regular + overtime).toBeCloseTo(hours, 10);
-      expect(String(overtime)).not.toMatch(/\d{10,}/);
+      for (const f of [span, wkspan]) {
+        const { hours, regular, overtime } = f(m);
+        expect(regular + overtime).toBeCloseTo(hours, 10);
+        expect(String(overtime)).not.toMatch(/\d{10,}/);
+      }
     }
   });
 });
@@ -92,9 +134,9 @@ describe("validateLabor — blocks stop a save", () => {
   };
   test("valid entry passes", () => expect(validateLabor(good)).toEqual([]));
   test("zero hours blocked", () => expect(validateLabor({ ...good, hours: 0 })).toContain("V3_qty"));
-  test("missing rate blocked, zero rate allowed", () => {
-    expect(validateLabor({ ...good, hourly_rate: null })).toContain("V4_unit_cost");
-    expect(validateLabor({ ...good, hourly_rate: 0 })).toEqual([]);
+  test("rate is NOT required (2026-08-04: hours only — Payroll owns comp)", () => {
+    expect(validateLabor({ ...good, hourly_rate: null })).toEqual([]);
+    expect(validateLabor({ ...good, hourly_rate: undefined })).toEqual([]);
   });
   test("future date blocked", () =>
     expect(validateLabor({ ...good, work_date: "2999-01-01" })).toContain("V5_future"));

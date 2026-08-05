@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import SubmitCelebration from "../components/SubmitCelebration";
-import { Card, EmptyState, FormScreen, GroupLabel, MathStrip, NoticeCard, NumericField, PHASE_ORDER, PickerRow, StickyFooter, TRADE_ORDER } from "../components/ui";
+import { Card, EmptyState, FormScreen, GroupLabel, NoticeCard, PHASE_ORDER, PickerRow, StickyFooter, TRADE_ORDER } from "../components/ui";
 import { phaseLabel } from "../i18n";
 import { computeClockHours, TRADES, todayStr, validateLabor } from "../schema";
 import { useNow } from "../liveClock";
@@ -18,7 +18,7 @@ import { buzz, timeStr } from "../util";
 import { colors, fonts, type } from "../theme";
 
 
-const FIX_KEYS = { V_trade: "fixTrade", V4_unit_cost: "fixRate", V_phase: "fixPhase", V_area: "fixArea" };
+const FIX_KEYS = { V_trade: "fixTrade", V_phase: "fixPhase", V_area: "fixArea" };
 
 const durStr = (min) => `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m`;
 // 8 → "8", 8.5 → "8.5", 8.25 → "8.25" — quarter-hour steps never need more.
@@ -31,7 +31,9 @@ export default function EndDayScreen({ t, lang, onDone }) {
   const [trade, setTrade] = useState(me?.default_trade ?? null);
   const [phase, setPhase] = useState(st.lastPhase);
   const [area, setArea] = useState(st.lastArea);
-  const [rate, setRate] = useState(st.lastRate ?? "");
+  // No rate state (Jeffrey 2026-08-04): the app records HOURS; the worker's
+  // rate is inner-company data on the Payroll agent. Nobody types a wage on
+  // a jobsite phone.
   const [errors, setErrors] = useState([]);
   const [saving, setSaving] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
@@ -63,7 +65,6 @@ export default function EndDayScreen({ t, lang, onDone }) {
   const c = computeClockHours(start.at, capAt ?? nowISO);
   const closingEarlierDay = start.work_date !== todayStr();
   const longDay = c.elapsedMin > 12 * 60;
-  const total = c.hours * Number(rate || 0);
 
   async function save() {
     if (saving) return;
@@ -90,7 +91,7 @@ export default function EndDayScreen({ t, lang, onDone }) {
         worker_id: start.worker_id,
         hour_type: "regular",
         hours: rec.regular,
-        hourly_rate: rate === "" ? null : Number(rate),
+        hourly_rate: null, // rates never ride field rows — Payroll owns comp
         phase,
         area,
         note: null,
@@ -208,17 +209,10 @@ export default function EndDayScreen({ t, lang, onDone }) {
 
       {c.hours > 0 && (
         <Card>
-          <NumericField
-            label={t("rate")}
-            value={rate}
-            onChangeText={(x) => setRate(x.replace(/[^0-9.]/g, ""))}
-            placeholder="0"
-          />
-          <MathStrip
-            left={`${hStr(c.hours)} × ${rate || "0"}`}
-            amount={`$${total.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}
-          />
-          <View style={{ marginTop: 14 }}>
+          {/* The RATE field + $ math strip lived here until 2026-08-04
+              (Jeffrey): workers submit hours only — trade, phase, area.
+              Rates are inner-company (Payroll agent); no wage on the glass. */}
+          <View>
             <PickerRow
               first
               label={t("trade")}

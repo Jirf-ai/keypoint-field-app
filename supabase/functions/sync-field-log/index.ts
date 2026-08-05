@@ -122,8 +122,12 @@ Deno.serve(async (req) => {
       // clock_id = End Day provenance: this line was computed FROM the day
       // clock, not typed (column added 2026-08-01 — the whitelist silently
       // dropped it before, so clock-sourced hours looked hand-typed).
+      // hourly_rate is deliberately ABSENT (Jeffrey 2026-08-04): the Field
+      // spine records HOURS ONLY — rates live on the Payroll agent
+      // (payroll_workers), and this whitelist is what guarantees no client
+      // version, old or new, can ever land a rate here again.
       ...pick(r, ["work_date", "trade", "worker_id", "phase", "area", "hours", "hour_type",
-        "hourly_rate", "co_ref", "recorded_by", "recorded_at", "captured_offline",
+        "co_ref", "recorded_by", "recorded_at", "captured_offline",
         "version", "supersedes", "note", "clock_id"]),
       synced_at: now,
     };
