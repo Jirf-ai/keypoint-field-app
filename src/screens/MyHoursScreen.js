@@ -21,10 +21,23 @@ function TypeStat({ label, value, tone }) {
   );
 }
 
+// Shift a YYYY-MM-DD by whole days (noon-anchored — immune to DST edges).
+const shiftDays = (ds, n) => {
+  const d = new Date(ds + "T12:00:00");
+  d.setDate(d.getDate() + n);
+  const p = (x) => String(x).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
 export default function MyHoursScreen({ t, lang }) {
   const wk = myWeekHours();
   const today = todayStr();
   const projects = Object.entries(wk.byProject).sort((a, b) => b[1] - a[1]);
+  // Last week rides along whenever it holds hours (Jeffrey 2026-08-04): the
+  // crew worked Saturday 8/1, and Mon-start weeks pushed it out of "this
+  // week" — weekend hours must stay visible in their correct day. Same
+  // card, same day bars; days without hours are skipped to keep it short.
+  const lastWk = myWeekHours(shiftDays(today, -7));
 
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 32 }}>
@@ -58,6 +71,25 @@ export default function MyHoursScreen({ t, lang }) {
               </View>
             );
           })}
+        </Card>
+      )}
+
+      {lastWk.total > 0 && (
+        <Card>
+          <GroupLabel>{t("lastWeek")}</GroupLabel>
+          <View style={s.totalRow}>
+            <Text style={s.big}>{hrs(lastWk.total)}</Text>
+            <Text style={s.unit}>{t("statHours").toLowerCase()}</Text>
+          </View>
+          {lastWk.days.filter((d) => d.hours > 0).map((d) => (
+            <View key={d.date} style={s.dayRow}>
+              <Text style={s.dayName}>{weekdayLabel(d.date, lang)}</Text>
+              <View style={s.dayBarTrack}>
+                <View style={[s.dayBar, { width: `${Math.min(100, (d.hours / 12) * 100)}%` }]} />
+              </View>
+              <Text style={s.dayHours}>{hrs(d.hours)}</Text>
+            </View>
+          ))}
         </Card>
       )}
 

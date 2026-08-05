@@ -361,3 +361,28 @@ describe("role-scoped visibility", () => {
     expect(store.activeLines(TODAY)).toHaveLength(3);
   });
 });
+
+describe("myWeekHours across week boundaries (Saturday visibility, 2026-08-04)", () => {
+  const shift = (ds, n) => {
+    const d = new Date(ds + "T12:00:00");
+    d.setDate(d.getDate() + n);
+    const p = (x) => String(x).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
+  test("last week's Saturday hours live under LAST week's ref, not this week's", async () => {
+    // Anchor: this week's Monday, then last week's Saturday = Monday − 2.
+    const today = TODAY;
+    const dow = (new Date(today + "T12:00:00").getDay() + 6) % 7; // Mon=0
+    const thisMonday = shift(today, -dow);
+    const lastSaturday = shift(thisMonday, -2);
+    await store.addLine({ ...LABOR, work_date: lastSaturday, hours: 8.25 });
+    await store.addLine({ ...LABOR, work_date: today, hours: 8 });
+    const thisWk = store.myWeekHours(today);
+    const lastWk = store.myWeekHours(shift(today, -7));
+    expect(thisWk.total).toBe(8);
+    expect(lastWk.total).toBe(8.25);
+    // …and Saturday lands on the SAT slot (index 5 of Mon-first days).
+    expect(lastWk.days[5].date).toBe(lastSaturday);
+    expect(lastWk.days[5].hours).toBe(8.25);
+  });
+});
