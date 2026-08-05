@@ -52,6 +52,24 @@ function UpdatingSpinner({ t }) {
   );
 }
 
+// The running clock's spinning diamond (Jeffrey 2026-08-04): the brand mark
+// turns beside ON THE CLOCK only while a timer is live. It renders solely in
+// DayClock's running branch, so mount/unmount IS the appear/disappear logic —
+// no clock state, no flags: not started or day ended means it does not exist.
+// Same spin as UpdatingSpinner so every turning diamond in the app moves alike.
+function ClockDiamond() {
+  const rot = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(rot, { toValue: 1, duration: 1100, easing: Easing.linear, useNativeDriver: false }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [rot]);
+  const rotate = rot.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+  return <Animated.Text style={[s.clockDiamond, { transform: [{ rotate }] }]}>◆</Animated.Text>;
+}
+
 // Start Day / End Day (2026-07-31) — the day's frame, between the plate and
 // the capture tile. Hours come SOLELY from this clock (see EndDayScreen); the
 // running strip is green (= active, like submit/upload) and flips amber when
@@ -87,6 +105,7 @@ function DayClock({ t, lang, workDate, nav, onStart, onSync }) {
               <Text style={[s.clockLabel, overdue && s.clockLabelOverdue]}>
                 {t(overdue ? "stillOnClockQ" : "onTheClock")}
               </Text>
+              <ClockDiamond />
             </View>
             <Text style={s.clockElapsed}>{elapsedStr(mins)}</Text>
             <Text style={s.clockSince}>
@@ -607,6 +626,8 @@ const s = StyleSheet.create({
   },
   clockCardOverdue: { backgroundColor: "#a1620710", borderColor: "#a1620744" },
   clockLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  // The running-clock diamond — brand accent like every turning ◆ in the app.
+  clockDiamond: { fontSize: 11, lineHeight: 13, color: colors.accent },
   clockDot: { width: 7, height: 7, borderRadius: 99, backgroundColor: colors.green },
   clockDotOverdue: { backgroundColor: colors.amber },
   clockLabel: { fontFamily: fonts.mono, fontSize: 9.5, fontWeight: "700", letterSpacing: 1.33, textTransform: "uppercase", color: colors.green },
