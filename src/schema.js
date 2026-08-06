@@ -150,6 +150,21 @@ export function computeClockHours(startISO, endISO) {
   return { elapsedMin, lunchMin, netMin, hours, regular, overtime, capped: rounded > cap };
 }
 
+// True-time display (Jeffrey 2026-08-05): what the stamps actually hold,
+// UNCAPPED — same lunch deduction and ¼-hour rounding so the number keeps the
+// receipt discipline, but no recording cap. Display-only: End Day still books
+// through computeClockHours and the caps; nothing here writes a line.
+export function computeTrueClockHours(startISO, endISO) {
+  const elapsedMin = Math.max(0, Math.round((new Date(endISO) - new Date(startISO)) / 60000));
+  const lunchMin = elapsedMin > CLOCK_POLICY.lunchAfterHours * 60 ? CLOCK_POLICY.lunchMinutes : 0;
+  const netMin = Math.max(0, elapsedMin - lunchMin);
+  const step = CLOCK_POLICY.roundQuarterHours;
+  const hours = Math.round(netMin / 60 / step) * step;
+  const dow = new Date(startISO).getDay();
+  const weekend = dow === 0 || dow === 6;
+  return { hours, regular: weekend ? 0 : hours, overtime: weekend ? hours : 0 };
+}
+
 // Photo naming convention (§4.5): {project-code}-{YYYYMMDD}-{seq}.jpg
 export function photoFilename(dateStr, seq, code) {
   const ymd = dateStr.replaceAll("-", "");

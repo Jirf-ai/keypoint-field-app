@@ -3,6 +3,7 @@
 import {
   CLOCK_POLICY,
   computeClockHours,
+  computeTrueClockHours,
   defaultClassForPhase,
   laborWarnings,
   lineWarnings,
@@ -124,6 +125,35 @@ describe("computeClockHours — the End Day receipt (policy 2026-08-04)", () => 
         expect(String(overtime)).not.toMatch(/\d{10,}/);
       }
     }
+  });
+});
+
+describe("computeTrueClockHours — uncapped display (2026-08-05)", () => {
+  const trueSpan = (y, mo, d, totalMin) => {
+    const start = new Date(y, mo - 1, d, 6, 0, 0);
+    const end = new Date(start.getTime() + totalMin * 60_000);
+    return computeTrueClockHours(start.toISOString(), end.toISOString());
+  };
+
+  test("weekday over 8h shows TRUE time where the recording policy caps", () => {
+    const t = trueSpan(2026, 7, 31, mins(9, 12)); // Friday, 9h12m
+    expect(t.hours).toBe(8.75); // 552 − 30 lunch = 522 → 8.7 → ¼-rounds to 8.75
+    expect(t.regular).toBe(8.75);
+    expect(t.overtime).toBe(0);
+    // …and the booking path still records the cap — display and records differ by design.
+    expect(span(mins(9, 12)).hours).toBe(8);
+  });
+
+  test("same lunch + rounding discipline as the receipt", () => {
+    const t = trueSpan(2026, 7, 31, mins(7, 26));
+    expect(t.hours).toBe(7); // matches computeClockHours under the cap
+  });
+
+  test("weekend hours are all overtime, uncapped past 12", () => {
+    const t = trueSpan(2026, 8, 1, mins(13, 0)); // Saturday 13h
+    expect(t.hours).toBe(12.5); // 780 − 30 = 750 → 12.5, no weekend cap here
+    expect(t.regular).toBe(0);
+    expect(t.overtime).toBe(12.5);
   });
 });
 

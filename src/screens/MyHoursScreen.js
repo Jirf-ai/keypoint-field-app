@@ -5,7 +5,7 @@
 // one job contributed.
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Card, EmptyState, GroupLabel } from "../components/ui";
-import { myWeekHours } from "../store";
+import { myWeekTrueHours } from "../store";
 import { todayStr } from "../schema";
 import { weekdayLabel } from "../util";
 import { colors, fonts, type } from "../theme";
@@ -30,14 +30,16 @@ const shiftDays = (ds, n) => {
 };
 
 export default function MyHoursScreen({ t, lang }) {
-  const wk = myWeekHours();
+  // True punch-to-punch hours (Jeffrey 2026-08-05): the crew sees their
+  // actual time, not what the recording caps booked.
+  const wk = myWeekTrueHours();
   const today = todayStr();
   const projects = Object.entries(wk.byProject).sort((a, b) => b[1] - a[1]);
   // Last week rides along whenever it holds hours (Jeffrey 2026-08-04): the
   // crew worked Saturday 8/1, and Mon-start weeks pushed it out of "this
   // week" — weekend hours must stay visible in their correct day. Same
   // card, same day bars; days without hours are skipped to keep it short.
-  const lastWk = myWeekHours(shiftDays(today, -7));
+  const lastWk = myWeekTrueHours(shiftDays(today, -7));
 
   return (
     <ScrollView contentContainerStyle={{ paddingVertical: 12, paddingBottom: 32 }}>
@@ -73,6 +75,8 @@ export default function MyHoursScreen({ t, lang }) {
           })}
         </Card>
       )}
+
+      <Text style={s.trueNote}>{t("trueHoursNote")}</Text>
 
       {lastWk.total > 0 && (
         <Card>
@@ -122,6 +126,8 @@ const s = StyleSheet.create({
   dayBarTrack: { flex: 1, height: 8, borderRadius: 4, backgroundColor: colors.surfaceSunken, overflow: "hidden" },
   dayBar: { height: 8, borderRadius: 4, backgroundColor: colors.ink },
   dayHours: { fontFamily: fonts.mono, fontSize: 14, fontWeight: "700", color: colors.text, width: 40, textAlign: "right", fontVariant: ["tabular-nums"] },
+
+  trueNote: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted, paddingHorizontal: 16, marginTop: 8, marginBottom: 4 },
 
   projRow: { flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingVertical: 11 },
   projName: { flex: 1, fontFamily: fonts.body, fontSize: 14, fontWeight: "600", color: colors.text },

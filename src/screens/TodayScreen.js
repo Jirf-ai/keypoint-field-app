@@ -21,7 +21,7 @@ import {
   daySubmittedAt,
   incidentsFor,
   deletePhoto,
-  myWeekHours,
+  myWeekTrueHours,
   openClock,
   photosFor,
   updatePhotoMeta,
@@ -280,7 +280,7 @@ export default function TodayScreen({ t, lang, workDate, pending, onSync, nav, o
   const incidents = incidentsFor(workDate);
   const hasEntries = lines.length > 0 || photos.length > 0;
   // Crew get their own week back for logging (CS-01) — the adoption lever.
-  const week = !isSM ? myWeekHours() : null;
+  const week = !isSM ? myWeekTrueHours() : null;
   // Site managers see who on their crew hasn't logged today (OV-01).
   const crew = isSM ? crewLogStatus(workDate) : null;
 

@@ -7,7 +7,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { call } from "./api";
-import { areasFor, CLOCK_POLICY, todayStr } from "./schema";
+import { areasFor, CLOCK_POLICY, computeTrueClockHours, todayStr } from "./schema";
 import { lastLocation } from "./location";
 import { clearPixels, deletePixels, getPixels, putPixels } from "./photoStore";
 import { shrinkDataUri } from "./util";
@@ -1273,6 +1273,60 @@ export function crewLogStatus(refDate = todayStr()) {
 // The active worker's own hours for the week containing refDate — the thing the
 // crew gets back for logging (CS-01). Across ALL their projects (a pay week is
 // not per-job); active versions only, grouped by day, hour type, and project.
+// True-hours week (Jeffrey 2026-08-05, "in all fairness"): the crew's own
+// screens show what the punch stamps actually hold — computeTrueClockHours
+// spans, no recording cap. Booking is untouched: End Day still records to
+// CLOCK_POLICY caps, and books/payroll never read this number. A closed
+// span's booked labor line (matched by clock_id) is skipped so a day never
+// double-counts; lines with no counted span — SM-recorded hours, pre-clock
+// legacy days, anything past the 7-day stamp-rehydration horizon — still
+// count, so the week never under-reports.
+export function myWeekTrueHours(refDate = todayStr()) {
+  const me = activeProfile();
+  const days = weekDays(refDate);
+  const idx = Object.fromEntries(days.map((d, i) => [d, i]));
+  const rows = days.map((date) => ({ date, hours: 0 }));
+  const byType = { regular: 0, overtime: 0, rework: 0 };
+  const byProject = {};
+  let total = 0;
+  const counted = new Set(); // start clock_ids summed from stamps
+
+  const evs = (state.clock_events ?? []).filter(
+    (e) => e.worker_id === me?.worker_id && e.work_date in idx
+  );
+  const ends = new Map(
+    evs.filter((e) => e.event === "end" && e.starts).map((e) => [e.starts, e])
+  );
+  for (const st of evs) {
+    if (st.event !== "start") continue;
+    const en = ends.get(st.clock_id);
+    if (!en) continue; // still running or never closed — nothing to sum yet
+    const { hours, regular, overtime } = computeTrueClockHours(st.at, en.at);
+    if (!hours) continue;
+    counted.add(st.clock_id);
+    total += hours;
+    rows[idx[st.work_date]].hours += hours;
+    byType.regular += regular;
+    byType.overtime += overtime;
+    const key = st.project_name || st.project_id || "—";
+    byProject[key] = (byProject[key] || 0) + hours;
+  }
+
+  const name = me?.display_name;
+  for (const l of state.lines) {
+    if (l.kind !== "labor" || l.superseded_by || l.worker !== name) continue;
+    if (!(l.work_date in idx)) continue;
+    if (l.clock_id && counted.has(l.clock_id)) continue; // the booked copy of a counted span
+    const h = Number(l.hours || 0);
+    total += h;
+    rows[idx[l.work_date]].hours += h;
+    if (byType[l.hour_type] != null) byType[l.hour_type] += h;
+    const key = l.project_name || l.project_id || "—";
+    byProject[key] = (byProject[key] || 0) + h;
+  }
+  return { days: rows, total, byType, byProject };
+}
+
 export function myWeekHours(refDate = todayStr()) {
   const name = activeProfile()?.display_name;
   const days = weekDays(refDate);

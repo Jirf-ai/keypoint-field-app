@@ -386,3 +386,44 @@ describe("myWeekHours across week boundaries (Saturday visibility, 2026-08-04)",
     expect(lastWk.days[5].hours).toBe(8.25);
   });
 });
+
+describe("myWeekTrueHours — uncapped crew display (2026-08-05)", () => {
+  // 2026-08-05 is a Wednesday; its Mon-first week is 08-03…08-09. Fixed dates
+  // keep the day-type math deterministic regardless of when the suite runs.
+  const REF = "2026-08-05";
+
+  test("stamps beat the booked line: a 10.5h punch day displays 10.0, not the recorded 8", async () => {
+    const me = store.activeProfile();
+    await store.mergeClockEvents([
+      { clock_id: "s1", event: "start", work_date: REF, worker_id: me.worker_id,
+        at: "2026-08-05T15:00:00Z", project_id: "p1", project_name: "123 Test St" },
+      { clock_id: "e1", event: "end", work_date: REF, worker_id: me.worker_id,
+        starts: "s1", at: "2026-08-06T01:30:00Z", project_id: "p1", project_name: "123 Test St" },
+    ]);
+    // End Day booked the capped copy of that same span (clock_id provenance).
+    await store.addLine({ ...LABOR, work_date: REF, hours: 8, clock_id: "s1" });
+
+    const wk = store.myWeekTrueHours(REF);
+    expect(wk.total).toBe(10); // 10.5h raw − 30m lunch, uncapped — counted once
+    expect(wk.days.find((d) => d.date === REF).hours).toBe(10);
+    expect(wk.byType.regular).toBe(10);
+    // The recording ledger still sees 8 — display and books differ by design.
+    expect(store.myWeekHours(REF).total).toBe(8);
+  });
+
+  test("a day with no stamps falls back to its labor line", async () => {
+    await store.addLine({ ...LABOR, work_date: "2026-08-04", hours: 8 });
+    const wk = store.myWeekTrueHours(REF);
+    expect(wk.days.find((d) => d.date === "2026-08-04").hours).toBe(8);
+  });
+
+  test("an open (running) clock adds nothing yet", async () => {
+    const me = store.activeProfile();
+    await store.mergeClockEvents([
+      { clock_id: "s2", event: "start", work_date: "2026-08-07", worker_id: me.worker_id,
+        at: "2026-08-07T15:00:00Z", project_id: "p1", project_name: "123 Test St" },
+    ]);
+    const wk = store.myWeekTrueHours(REF);
+    expect(wk.days.find((d) => d.date === "2026-08-07").hours).toBe(0);
+  });
+});
