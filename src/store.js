@@ -1291,6 +1291,7 @@ export function myWeekTrueHours(refDate = todayStr()) {
   const byProject = {};
   let total = 0;
   const counted = new Set(); // start clock_ids summed from stamps
+  const stampDates = new Set(); // dates where a real span was summed
 
   // A HUMAN AMENDMENT BEATS THE STAMP (zhang 8/4, frozen-frame morning): a
   // clock whose active labor line carries version > 1 was corrected on
@@ -1316,6 +1317,7 @@ export function myWeekTrueHours(refDate = todayStr()) {
     const { hours, regular, overtime } = computeTrueClockHours(st.at, en.at);
     if (!hours) continue;
     counted.add(st.clock_id);
+    stampDates.add(st.work_date);
     total += hours;
     rows[idx[st.work_date]].hours += hours;
     byType.regular += regular;
@@ -1328,6 +1330,10 @@ export function myWeekTrueHours(refDate = todayStr()) {
     if (l.kind !== "labor" || l.superseded_by || l.worker !== name) continue;
     if (!(l.work_date in idx)) continue;
     if (l.clock_id && counted.has(l.clock_id)) continue; // the booked copy of a counted span
+    // A punched day's clock-LESS lines are its manual booking of the same
+    // worked time (Robert's typed 8/1 beside real stamps) — counting both
+    // doubles the day. Days without a real span still take their lines.
+    if (!l.clock_id && stampDates.has(l.work_date)) continue;
     const h = Number(l.hours || 0);
     total += h;
     rows[idx[l.work_date]].hours += h;

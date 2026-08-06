@@ -444,3 +444,21 @@ describe("myWeekTrueHours — human amendment beats a bad stamp (zhang 8/4 shape
     expect(wk.total).toBe(8);
   });
 });
+
+describe("myWeekTrueHours — punched day ignores its clock-less manual booking (Robert 8/1 shape)", () => {
+  test("stamps + typed lines for the same day count once", async () => {
+    const me = store.activeProfile();
+    await store.mergeClockEvents([
+      { clock_id: "s4", event: "start", work_date: "2026-08-01", worker_id: me.worker_id,
+        at: "2026-08-01T15:33:00Z", project_id: "p1", project_name: "123 Test St" },
+      { clock_id: "e4", event: "end", work_date: "2026-08-01", worker_id: me.worker_id,
+        starts: "s4", at: "2026-08-02T00:12:00Z", project_id: "p1", project_name: "123 Test St" },
+    ]); // Saturday 8h39m − 30m lunch → 8.25 true
+    // The same day was ALSO typed by hand (no clock link) — must not double.
+    await store.addLine({ ...LABOR, work_date: "2026-08-01", hours: 8 });
+    await store.addLine({ ...LABOR, work_date: "2026-08-01", hours: 0.25, hour_type: "overtime" });
+    const wk = store.myWeekTrueHours("2026-08-01");
+    expect(wk.days.find((d) => d.date === "2026-08-01").hours).toBe(8.25);
+    expect(wk.total).toBe(8.25);
+  });
+});
