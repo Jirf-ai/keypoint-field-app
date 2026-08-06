@@ -107,14 +107,14 @@ export const CLOCK_POLICY = {
   roundQuarterHours: 0.25, // DOL-safe: round net time to the nearest ¼ hour
   lunchMinutes: 30,        // auto-deducted once the raw span exceeds…
   lunchAfterHours: 6,      // …this many hours on the clock
-  // ---- Recorded-hours policy (Jeffrey 2026-08-04) ----
+  // ---- Recorded-hours policy (Jeffrey 2026-08-04; caps ON HOLD 2026-08-05) ----
   // The Field app records HOURS ONLY — compensation is inner-company (the
   // Payroll agent holds each worker's rate; nothing here prices anything).
-  // Mon–Fri: recorded hours cap at 8, all regular — weekday overtime does
-  // not exist in this policy. Sat/Sun: every hour IS overtime (payroll pays
-  // 150%), day capped under 12. The cap is INTERNAL: the visible timer keeps
-  // running true (the never-freeze rule stands); the cap is what End Day
-  // RECORDS.
+  // Day type still classifies: Mon–Fri all regular (weekday overtime does
+  // not exist), Sat/Sun every hour IS overtime (payroll pays 150%).
+  // THE CAPS ARE ON HOLD (Jeffrey 2026-08-05): End Day books TRUE time until
+  // crews sign the employment agreement; these constants stay for the
+  // re-enable and for integrity monitors. The visible timer never freezes.
   weekdayCapHours: 8,
   weekendCapHours: 12,
   overtimeAfterHours: 8,   // legacy constant (pre-2026-08-04 split); no
@@ -135,25 +135,21 @@ export const CLOCK_POLICY = {
 // a shift that straddles midnight belongs to the day it began on, same rule
 // clockEnd uses for work_date. `capped` reports that the cap bit (display
 // may say so; the timer itself never freezes).
+// CAPS ON HOLD (Jeffrey 2026-08-05): until crews sign the employment
+// agreement, End Day BOOKS true time — books, database, and the crew's
+// screens all agree. The end stamp keeps its GPS fix; offsite/short-day
+// review lives in the server's field_day_integrity view, not in a cap.
+// When the agreements land, restore Math.min(rounded, cap) here
+// (weekdayCapHours/weekendCapHours above) — the display path
+// (computeTrueClockHours) stays uncapped by design.
 export function computeClockHours(startISO, endISO) {
-  const elapsedMin = Math.max(0, Math.round((new Date(endISO) - new Date(startISO)) / 60000));
-  const lunchMin = elapsedMin > CLOCK_POLICY.lunchAfterHours * 60 ? CLOCK_POLICY.lunchMinutes : 0;
-  const netMin = Math.max(0, elapsedMin - lunchMin);
-  const step = CLOCK_POLICY.roundQuarterHours;
-  const rounded = Math.round(netMin / 60 / step) * step;
-  const dow = new Date(startISO).getDay();
-  const weekend = dow === 0 || dow === 6;
-  const cap = weekend ? CLOCK_POLICY.weekendCapHours : CLOCK_POLICY.weekdayCapHours;
-  const hours = Math.min(rounded, cap);
-  const regular = weekend ? 0 : hours;
-  const overtime = weekend ? hours : 0;
-  return { elapsedMin, lunchMin, netMin, hours, regular, overtime, capped: rounded > cap };
+  return { ...computeTrueClockHours(startISO, endISO), capped: false };
 }
 
-// True-time display (Jeffrey 2026-08-05): what the stamps actually hold,
-// UNCAPPED — same lunch deduction and ¼-hour rounding so the number keeps the
-// receipt discipline, but no recording cap. Display-only: End Day still books
-// through computeClockHours and the caps; nothing here writes a line.
+// True time (Jeffrey 2026-08-05): what the stamps actually hold, UNCAPPED —
+// same lunch deduction and ¼-hour rounding as the receipt discipline. This is
+// the display truth (My Hours, Today's week stat) and, while the caps are on
+// hold, the booking truth too (computeClockHours delegates here).
 export function computeTrueClockHours(startISO, endISO) {
   const elapsedMin = Math.max(0, Math.round((new Date(endISO) - new Date(startISO)) / 60000));
   const lunchMin = elapsedMin > CLOCK_POLICY.lunchAfterHours * 60 ? CLOCK_POLICY.lunchMinutes : 0;
@@ -162,7 +158,7 @@ export function computeTrueClockHours(startISO, endISO) {
   const hours = Math.round(netMin / 60 / step) * step;
   const dow = new Date(startISO).getDay();
   const weekend = dow === 0 || dow === 6;
-  return { hours, regular: weekend ? 0 : hours, overtime: weekend ? hours : 0 };
+  return { elapsedMin, lunchMin, netMin, hours, regular: weekend ? 0 : hours, overtime: weekend ? hours : 0 };
 }
 
 // Photo naming convention (§4.5): {project-code}-{YYYYMMDD}-{seq}.jpg

@@ -27,16 +27,16 @@ const spanFrom = (y, mo, d, totalMin) => {
 const span = (totalMin) => spanFrom(2026, 7, 31, totalMin);    // Friday
 const wkspan = (totalMin) => spanFrom(2026, 8, 1, totalMin);   // Saturday
 
-describe("computeClockHours — the End Day receipt (policy 2026-08-04)", () => {
-  test("weekday 9h12m − 30m lunch rounds 8.75 but RECORDS the 8h cap, all regular", () => {
+describe("computeClockHours — the End Day receipt (caps ON HOLD 2026-08-05)", () => {
+  test("weekday 9h12m − 30m lunch RECORDS the true 8.75 — cap on hold until agreements", () => {
     const c = span(mins(9, 12));
     expect(c.elapsedMin).toBe(552);
     expect(c.lunchMin).toBe(30);
     expect(c.netMin).toBe(522);
-    expect(c.hours).toBe(8);      // internal cap — weekday OT does not exist
-    expect(c.regular).toBe(8);
+    expect(c.hours).toBe(8.75);   // true time — weekday OT still does not exist
+    expect(c.regular).toBe(8.75);
     expect(c.overtime).toBe(0);
-    expect(c.capped).toBe(true);
+    expect(c.capped).toBe(false);
   });
 
   test("weekday under the cap records true rounded time, uncapped", () => {
@@ -87,12 +87,12 @@ describe("computeClockHours — the End Day receipt (policy 2026-08-04)", () => 
     expect(c.overtime).toBe(0);
   });
 
-  test("forgotten 14h weekday clock still records only the 8h cap", () => {
-    const c = span(mins(14)); // − 30 lunch = 13:30 rounded
-    expect(c.hours).toBe(8);
-    expect(c.regular).toBe(8);
+  test("forgotten 14h weekday clock records true time while caps are on hold", () => {
+    const c = span(mins(14)); // − 30 lunch = 13:30
+    expect(c.hours).toBe(13.5); // the 12h still-working nudge + integrity view cover abuse
+    expect(c.regular).toBe(13.5);
     expect(c.overtime).toBe(0);
-    expect(c.capped).toBe(true);
+    expect(c.capped).toBe(false);
   });
 
   test("SATURDAY is all overtime — payroll pays 150%, the app just classifies", () => {
@@ -103,12 +103,12 @@ describe("computeClockHours — the End Day receipt (policy 2026-08-04)", () => 
     expect(c.capped).toBe(false);
   });
 
-  test("weekend day caps at 12 recorded hours", () => {
-    const c = wkspan(mins(14)); // − 30 lunch = 13:30 rounded
-    expect(c.hours).toBe(12);
+  test("weekend 14h records true time too — all overtime, cap on hold", () => {
+    const c = wkspan(mins(14)); // − 30 lunch = 13:30
+    expect(c.hours).toBe(13.5);
     expect(c.regular).toBe(0);
-    expect(c.overtime).toBe(12);
-    expect(c.capped).toBe(true);
+    expect(c.overtime).toBe(13.5);
+    expect(c.capped).toBe(false);
   });
 
   test("Sunday classifies like Saturday", () => {
@@ -140,8 +140,8 @@ describe("computeTrueClockHours — uncapped display (2026-08-05)", () => {
     expect(t.hours).toBe(8.75); // 552 − 30 lunch = 522 → 8.7 → ¼-rounds to 8.75
     expect(t.regular).toBe(8.75);
     expect(t.overtime).toBe(0);
-    // …and the booking path still records the cap — display and records differ by design.
-    expect(span(mins(9, 12)).hours).toBe(8);
+    // …and while caps are on hold, the booking path records the same truth.
+    expect(span(mins(9, 12)).hours).toBe(8.75);
   });
 
   test("same lunch + rounding discipline as the receipt", () => {
