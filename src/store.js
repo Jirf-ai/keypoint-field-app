@@ -1283,6 +1283,7 @@ export function crewLogStatus(refDate = todayStr()) {
 // count, so the week never under-reports.
 export function myWeekTrueHours(refDate = todayStr()) {
   const me = activeProfile();
+  const name = me?.display_name;
   const days = weekDays(refDate);
   const idx = Object.fromEntries(days.map((d, i) => [d, i]));
   const rows = days.map((date) => ({ date, hours: 0 }));
@@ -1290,6 +1291,16 @@ export function myWeekTrueHours(refDate = todayStr()) {
   const byProject = {};
   let total = 0;
   const counted = new Set(); // start clock_ids summed from stamps
+
+  // A HUMAN AMENDMENT BEATS THE STAMP (zhang 8/4, frozen-frame morning): a
+  // clock whose active labor line carries version > 1 was corrected on
+  // evidence — the punch itself was the bad record. Those clocks are not
+  // summed from stamps; their (corrected) lines count below instead.
+  const amendedClocks = new Set(
+    state.lines
+      .filter((l) => l.kind === "labor" && !l.superseded_by && l.worker === name && l.clock_id && Number(l.version || 1) > 1)
+      .map((l) => l.clock_id)
+  );
 
   const evs = (state.clock_events ?? []).filter(
     (e) => e.worker_id === me?.worker_id && e.work_date in idx
@@ -1299,6 +1310,7 @@ export function myWeekTrueHours(refDate = todayStr()) {
   );
   for (const st of evs) {
     if (st.event !== "start") continue;
+    if (amendedClocks.has(st.clock_id)) continue; // corrected day — the line is the truth
     const en = ends.get(st.clock_id);
     if (!en) continue; // still running or never closed — nothing to sum yet
     const { hours, regular, overtime } = computeTrueClockHours(st.at, en.at);
@@ -1312,7 +1324,6 @@ export function myWeekTrueHours(refDate = todayStr()) {
     byProject[key] = (byProject[key] || 0) + hours;
   }
 
-  const name = me?.display_name;
   for (const l of state.lines) {
     if (l.kind !== "labor" || l.superseded_by || l.worker !== name) continue;
     if (!(l.work_date in idx)) continue;

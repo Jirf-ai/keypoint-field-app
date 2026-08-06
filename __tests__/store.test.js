@@ -427,3 +427,20 @@ describe("myWeekTrueHours — uncapped crew display (2026-08-05)", () => {
     expect(wk.days.find((d) => d.date === "2026-08-07").hours).toBe(0);
   });
 });
+
+describe("myWeekTrueHours — human amendment beats a bad stamp (zhang 8/4 shape)", () => {
+  test("a v2-corrected line wins over the punch span for its clock", async () => {
+    const me = store.activeProfile();
+    await store.mergeClockEvents([
+      { clock_id: "s3", event: "start", work_date: "2026-08-04", worker_id: me.worker_id,
+        at: "2026-08-04T16:40:00Z", project_id: "p1", project_name: "123 Test St" },
+      { clock_id: "e3", event: "end", work_date: "2026-08-04", worker_id: me.worker_id,
+        starts: "s3", at: "2026-08-05T00:06:00Z", project_id: "p1", project_name: "123 Test St" },
+    ]); // span reads 7.0 — but the start stamp is the known-bad record
+    const v1 = await store.addLine({ ...LABOR, work_date: "2026-08-04", hours: 7, clock_id: "s3" });
+    await store.amendLine(v1.line_id, { ...LABOR, work_date: "2026-08-04", hours: 8, clock_id: "s3" });
+    const wk = store.myWeekTrueHours("2026-08-05");
+    expect(wk.days.find((d) => d.date === "2026-08-04").hours).toBe(8);
+    expect(wk.total).toBe(8);
+  });
+});
